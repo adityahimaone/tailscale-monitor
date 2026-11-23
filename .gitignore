@@ -1,0 +1,6 @@
+tailmon
+tailmon-*
+.env
+.env.*
+*.log
+.DS_Store

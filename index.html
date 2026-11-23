@@ -1,0 +1,3357 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light" data-theme-mode="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tailscale Monitor — Fleet Telemetry</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%2318181F'/%3E%3Crect x='10.2' y='2.6' width='3.6' height='3.6' rx='1' fill='%23fff'/%3E%3Crect x='10.2' y='17.8' width='3.6' height='3.6' rx='1' fill='%23fff'/%3E%3Crect x='2.6' y='10.2' width='3.6' height='3.6' rx='1' fill='%23fff'/%3E%3Crect x='17.8' y='10.2' width='3.6' height='3.6' rx='1' fill='%23fff'/%3E%3Crect x='5' y='5' width='3.2' height='3.2' rx='1' fill='%23fff' fill-opacity='.88'/%3E%3Crect x='15.8' y='5' width='3.2' height='3.2' rx='1' fill='%23fff' fill-opacity='.88'/%3E%3Crect x='5' y='15.8' width='3.2' height='3.2' rx='1' fill='%23fff' fill-opacity='.88'/%3E%3Crect x='15.8' y='15.8' width='3.2' height='3.2' rx='1' fill='%23fff' fill-opacity='.88'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script>
+(function () {
+  var saved = 'light';
+  try { saved = localStorage.getItem('tailmon_theme') || 'light'; } catch (_) {}
+  if (saved !== 'light' && saved !== 'dark' && saved !== 'auto') saved = 'light';
+  var resolved = saved === 'auto'
+    ? (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+    : saved;
+  document.documentElement.dataset.themeMode = saved;
+  document.documentElement.dataset.theme = resolved;
+})();
+</script>
+<style>
+  :root {
+    --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    --ease-smooth: cubic-bezier(0.22, 1, 0.36, 1);
+
+    /* Light Architectural Palette (Reference Match) */
+    --page-bg: #FFFFFF;
+    --shell-bg: #F6F6F8;
+    --shell-border: #EBEBF0;
+    --shell-shadow: 0 18px 50px -24px rgba(15, 23, 42, 0.12);
+    --shell-rim: linear-gradient(90deg, transparent 0%, #FFFFFF 50%, transparent 100%);
+
+    --text-primary: #18181F;
+    --text-secondary: #585866;
+    --text-muted: #767684;
+    --text-faint: #9898A6;
+
+    --surface: #FFFFFF;
+    --surface-soft: #FAFAFC;
+    --surface-inset: #F4F4F8;
+    --surface-offline: #FBFBFC;
+    --border: #EBEBF0;
+    --border-strong: #DCDCE4;
+    --border-hover: #C8C8D6;
+
+    --card-shadow: 0 4px 14px -4px rgba(15, 23, 42, 0.06);
+    --card-shadow-hover: 0 12px 28px -10px rgba(15, 23, 42, 0.12);
+
+    --hub-ring-bg: rgba(255, 255, 255, 0.96);
+    --hub-ring-border: #FFFFFF;
+    --hub-ring-shadow: 0 18px 36px -8px rgba(15, 23, 42, 0.22), 0 4px 12px -2px rgba(15, 23, 42, 0.10);
+
+    --line-stroke: #DCDCE3;
+    --line-active: #18181F;
+    --node-fill: #FFFFFF;
+    --node-stroke: #CFCFD9;
+
+    /* Pastel Card 1: Lavender */
+    --c1-bg: linear-gradient(180deg, #F7F1FC 0%, #F2E9F9 52%, #E9DDF5 100%);
+    --c1-border: #FFFFFF;
+    --c1-mesh: rgba(130, 95, 175, 0.11);
+    --c1-shadow: 0 10px 28px -10px rgba(15, 23, 42, 0.09);
+    --c1-shadow-hover: 0 16px 36px -12px rgba(88, 48, 140, 0.16);
+    --c1-icon: #23232B;
+    --c1-bezel-bg: rgba(255, 255, 255, 0.48);
+    --c1-bezel-border: rgba(255, 255, 255, 0.85);
+    --c1-inner-bg: rgba(255, 255, 255, 0.95);
+    --c1-inner-border: #EFEAF6;
+    --c1-pop-bg: rgba(255, 255, 255, 0.86);
+    --c1-pop-border: rgba(255, 255, 255, 0.96);
+    --c1-pop-shadow: 0 16px 36px -8px rgba(45, 22, 82, 0.16);
+
+    /* Pastel Card 2: Sky Blue */
+    --c2-bg: linear-gradient(180deg, #EDF6FE 0%, #E5F1FC 52%, #DCEAFB 100%);
+    --c2-border: #FFFFFF;
+    --c2-mesh: rgba(60, 120, 195, 0.11);
+    --c2-shadow: 0 10px 28px -10px rgba(15, 23, 42, 0.09);
+    --c2-shadow-hover: 0 16px 36px -12px rgba(25, 75, 145, 0.16);
+    --c2-icon: #23232B;
+    --c2-table-bg: rgba(255, 255, 255, 0.64);
+    --c2-table-border: rgba(255, 255, 255, 0.92);
+    --c2-table-div: #E2E9F4;
+    --c2-pop-bg: linear-gradient(180deg, rgba(255,255,255,0.84) 0%, rgba(255,255,255,0.95) 55%, #FFFFFF 100%);
+    --c2-pop-border: #FFFFFF;
+    --c2-pop-shadow: 0 16px 36px -8px rgba(18, 45, 95, 0.16);
+    --c2-track: #EDF0F6;
+
+    /* Pastel Card 3: Peach / Apricot */
+    --c3-bg: linear-gradient(180deg, #FDF2EA 0%, #FBECE2 52%, #F8E4D8 100%);
+    --c3-border: #FFFFFF;
+    --c3-mesh: rgba(185, 115, 70, 0.10);
+    --c3-shadow: 0 10px 28px -10px rgba(15, 23, 42, 0.09);
+    --c3-shadow-hover: 0 16px 36px -12px rgba(165, 85, 40, 0.16);
+    --c3-icon: #23232B;
+    --c3-bezel-bg: rgba(255, 255, 255, 0.48);
+    --c3-bezel-border: rgba(255, 255, 255, 0.88);
+    --c3-inner-bg: rgba(255, 255, 255, 0.93);
+    --c3-inner-border: #F6ECE6;
+    --c3-mini-bg: #FFFFFF;
+    --c3-mini-border: #F3ECE8;
+    --c3-pop-bg: rgba(255, 255, 255, 0.94);
+    --c3-pop-border: #FFFFFF;
+    --c3-pop-shadow: 0 16px 36px -8px rgba(95, 45, 15, 0.14);
+
+    /* Semantic telemetry accents */
+    --seg-blue: #7DA9F7;
+    --seg-violet: #B884EB;
+    --seg-peach: #EE9777;
+    --seg-gold: #E9CC65;
+
+    --ok: #16A34A;
+    --ok-bg: rgba(22, 163, 74, 0.10);
+    --ok-border: rgba(22, 163, 74, 0.24);
+    --ok-text: #15803D;
+
+    --info: #2563EB;
+    --info-bg: rgba(125, 169, 247, 0.16);
+    --info-border: rgba(114, 164, 245, 0.36);
+    --info-text: #1D4ED8;
+
+    --warn: #D97706;
+    --warn-bg: rgba(233, 204, 101, 0.22);
+    --warn-border: rgba(217, 119, 6, 0.32);
+    --warn-text: #9A3412;
+
+    --danger: #E86A42;
+    --danger-bg: rgba(232, 106, 66, 0.12);
+    --danger-border: rgba(232, 106, 66, 0.34);
+    --danger-text: #B91C1C;
+
+    --ring-focus: rgba(24, 24, 31, 0.14);
+    --spotlight-ring: rgba(125, 169, 247, 0.55);
+  }
+
+  html[data-theme="dark"] {
+    --page-bg: #09090C;
+    --shell-bg: #101014;
+    --shell-border: rgba(39, 39, 42, 0.92);
+    --shell-shadow: 0 24px 60px -24px rgba(0, 0, 0, 0.65);
+    --shell-rim: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.15) 50%, transparent 100%);
+
+    --text-primary: #F4F4F5;
+    --text-secondary: #A1A1AA;
+    --text-muted: #71717A;
+    --text-faint: #52525B;
+
+    --surface: rgba(24, 24, 27, 0.96);
+    --surface-soft: #141419;
+    --surface-inset: #131318;
+    --surface-offline: rgba(20, 20, 24, 0.72);
+    --border: rgba(39, 39, 42, 0.9);
+    --border-strong: #2E2E36;
+    --border-hover: #3F3F48;
+
+    --card-shadow: 0 4px 16px -4px rgba(0, 0, 0, 0.45);
+    --card-shadow-hover: 0 12px 30px -10px rgba(0, 0, 0, 0.65);
+
+    --hub-ring-bg: rgba(39, 39, 42, 0.85);
+    --hub-ring-border: rgba(63, 63, 70, 0.85);
+    --hub-ring-shadow: 0 18px 36px -8px rgba(0, 0, 0, 0.75);
+
+    --line-stroke: rgba(63, 63, 70, 0.82);
+    --line-active: #E4E4E7;
+    --node-fill: #18181B;
+    --node-stroke: #52525B;
+
+    /* Pastel Card 1 Dark: Deep Lavender */
+    --c1-bg: linear-gradient(180deg, #231B2E 0%, #1D1726 52%, #181320 100%);
+    --c1-border: rgba(39, 39, 42, 0.92);
+    --c1-mesh: rgba(175, 138, 226, 0.09);
+    --c1-shadow: 0 12px 32px -12px rgba(0, 0, 0, 0.6);
+    --c1-shadow-hover: 0 16px 38px -12px rgba(0, 0, 0, 0.75);
+    --c1-icon: #E9D5FF;
+    --c1-bezel-bg: rgba(39, 39, 42, 0.42);
+    --c1-bezel-border: rgba(63, 63, 70, 0.62);
+    --c1-inner-bg: rgba(24, 24, 27, 0.95);
+    --c1-inner-border: #27272A;
+    --c1-pop-bg: rgba(24, 24, 27, 0.90);
+    --c1-pop-border: rgba(63, 63, 70, 0.82);
+    --c1-pop-shadow: 0 16px 36px -8px rgba(0, 0, 0, 0.65);
+
+    /* Pastel Card 2 Dark: Deep Sky */
+    --c2-bg: linear-gradient(180deg, #162233 0%, #131D2B 52%, #101824 100%);
+    --c2-border: rgba(39, 39, 42, 0.92);
+    --c2-mesh: rgba(96, 165, 250, 0.09);
+    --c2-shadow: 0 12px 32px -12px rgba(0, 0, 0, 0.6);
+    --c2-shadow-hover: 0 16px 38px -12px rgba(0, 0, 0, 0.75);
+    --c2-icon: #BAE6FD;
+    --c2-table-bg: rgba(24, 24, 27, 0.58);
+    --c2-table-border: rgba(39, 39, 42, 0.85);
+    --c2-table-div: rgba(39, 39, 42, 0.75);
+    --c2-pop-bg: rgba(24, 24, 27, 0.93);
+    --c2-pop-border: rgba(63, 63, 70, 0.82);
+    --c2-pop-shadow: 0 16px 36px -8px rgba(0, 0, 0, 0.65);
+    --c2-track: #27272A;
+
+    /* Pastel Card 3 Dark: Deep Peach */
+    --c3-bg: linear-gradient(180deg, #2B1F1A 0%, #241A16 52%, #1D1512 100%);
+    --c3-border: rgba(39, 39, 42, 0.92);
+    --c3-mesh: rgba(236, 154, 106, 0.09);
+    --c3-shadow: 0 12px 32px -12px rgba(0, 0, 0, 0.6);
+    --c3-shadow-hover: 0 16px 38px -12px rgba(0, 0, 0, 0.75);
+    --c3-icon: #FED7AA;
+    --c3-bezel-bg: rgba(39, 39, 42, 0.42);
+    --c3-bezel-border: rgba(63, 63, 70, 0.62);
+    --c3-inner-bg: rgba(24, 24, 27, 0.92);
+    --c3-inner-border: #27272A;
+    --c3-mini-bg: rgba(39, 39, 42, 0.82);
+    --c3-mini-border: rgba(63, 63, 70, 0.75);
+    --c3-pop-bg: rgba(24, 24, 27, 0.95);
+    --c3-pop-border: rgba(63, 63, 70, 0.82);
+    --c3-pop-shadow: 0 16px 36px -8px rgba(0, 0, 0, 0.65);
+
+    --ok: #22C55E;
+    --ok-bg: rgba(34, 197, 94, 0.14);
+    --ok-border: rgba(34, 197, 94, 0.30);
+    --ok-text: #86EFAC;
+
+    --info: #72A4F5;
+    --info-bg: rgba(114, 164, 245, 0.14);
+    --info-border: rgba(114, 164, 245, 0.32);
+    --info-text: #93C5FD;
+
+    --warn: #DFC05B;
+    --warn-bg: rgba(223, 192, 91, 0.14);
+    --warn-border: rgba(223, 192, 91, 0.32);
+    --warn-text: #FDE68A;
+
+    --danger: #E86A42;
+    --danger-bg: rgba(232, 106, 66, 0.15);
+    --danger-border: rgba(232, 106, 66, 0.36);
+    --danger-text: #FCA5A5;
+
+    --ring-focus: rgba(255, 255, 255, 0.14);
+    --spotlight-ring: rgba(125, 169, 247, 0.65);
+  }
+
+  * { box-sizing: border-box; }
+
+  html {
+    background: var(--page-bg);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    transition: background-color 0.2s ease, color 0.2s ease;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--page-bg);
+    color: var(--text-primary);
+    line-height: 1.45;
+  }
+
+  .page-wrap {
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: 20px 16px 56px;
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+  }
+
+  @media (min-width: 640px) {
+    .page-wrap { padding: 28px 24px 64px; gap: 26px; }
+  }
+
+  /* ======================================================================== */
+  /* Architectural Shell (Reference rounded-[28px] container)                 */
+  /* ======================================================================== */
+  .arch-shell {
+    position: relative;
+    overflow: hidden;
+    border-radius: 28px;
+    border: 1px solid var(--shell-border);
+    background: var(--shell-bg);
+    box-shadow: var(--shell-shadow);
+    transition: background-color 0.2s ease, border-color 0.2s ease;
+  }
+
+  .arch-shell::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 1px;
+    background: var(--shell-rim);
+    pointer-events: none;
+    z-index: 2;
+  }
+
+  .hero-shell {
+    padding: 18px 18px 34px;
+  }
+
+  @media (min-width: 640px) {
+    .hero-shell { padding: 20px 32px 44px; }
+  }
+
+  @media (min-width: 1024px) {
+    .hero-shell { padding: 22px 54px 52px; }
+  }
+
+  /* ======================================================================== */
+  /* Slim Top Utility Bar                                                     */
+  /* ======================================================================== */
+  .utility-bar {
+    position: relative;
+    z-index: 15;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px 14px;
+    padding-bottom: 16px;
+    margin-bottom: 24px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .utility-left {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 12px;
+    min-width: 0;
+  }
+
+  .brand-mini {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13.5px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: var(--text-primary);
+  }
+
+  .brand-mini-mark {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 7px;
+    background: linear-gradient(180deg, #2B2B32 0%, #151519 100%);
+    box-shadow: inset 0 1px 1px rgba(255,255,255,0.22), 0 2px 6px rgba(15,23,42,0.18);
+    flex-shrink: 0;
+  }
+
+  .meta-sep {
+    width: 3px;
+    height: 3px;
+    border-radius: 50%;
+    background: var(--text-faint);
+    flex-shrink: 0;
+  }
+
+  .utility-meta {
+    font-size: 12px;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .utility-right {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .countdown-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 32px;
+    padding: 0 10px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .countdown-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--ok);
+    flex-shrink: 0;
+  }
+
+  .countdown-dot.stale {
+    background: var(--warn);
+  }
+
+  .btn {
+    appearance: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    height: 32px;
+    padding: 0 12px;
+    border-radius: 999px;
+    border: 1px solid var(--border-strong);
+    background: var(--surface);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    cursor: pointer;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+    transition: border-color 0.16s ease, background-color 0.16s ease, transform 0.14s ease, box-shadow 0.16s ease;
+  }
+
+  .btn:hover:not(:disabled) {
+    border-color: var(--border-hover);
+    box-shadow: 0 4px 12px -4px rgba(15, 23, 42, 0.12);
+  }
+
+  .btn:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+
+  .btn:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--ring-focus);
+  }
+
+  .btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+
+  .btn-ghost {
+    background: transparent;
+    border-color: transparent;
+    color: var(--text-secondary);
+    box-shadow: none;
+  }
+
+  .btn-ghost:hover:not(:disabled) {
+    background: var(--surface);
+    border-color: var(--border);
+    box-shadow: none;
+  }
+
+  .btn-icon-spin svg {
+    animation: spin 0.85s linear infinite;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  /* Theme Segmented Control */
+  .theme-switch {
+    display: inline-flex;
+    align-items: center;
+    height: 32px;
+    padding: 3px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    gap: 2px;
+  }
+
+  .theme-btn {
+    appearance: none;
+    border: 0;
+    background: transparent;
+    color: var(--text-muted);
+    height: 24px;
+    padding: 0 9px;
+    border-radius: 999px;
+    font-family: var(--font-sans);
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    transition: background-color 0.15s ease, color 0.15s ease;
+  }
+
+  .theme-btn:hover {
+    color: var(--text-primary);
+  }
+
+  .theme-btn.active {
+    background: var(--text-primary);
+    color: var(--page-bg);
+  }
+
+  .theme-btn:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--ring-focus);
+  }
+
+  /* ======================================================================== */
+  /* Beat 1: Centered Showcase Header                                         */
+  /* ======================================================================== */
+  .showcase-header {
+    position: relative;
+    z-index: 10;
+    max-width: 660px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+
+  .eyebrow-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-secondary);
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.05);
+  }
+
+  .eyebrow-dot-outer {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--surface-inset);
+  }
+
+  .eyebrow-dot-inner {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--ok);
+  }
+
+  .eyebrow-dot-inner.warn {
+    background: var(--danger);
+  }
+
+  .showcase-title {
+    margin: 14px 0 0;
+    font-size: clamp(26px, 4.2vw, 40px);
+    font-weight: 500;
+    line-height: 1.12;
+    letter-spacing: -0.032em;
+    color: var(--text-primary);
+  }
+
+  .showcase-subtitle {
+    margin: 12px 0 0;
+    max-width: 490px;
+    font-size: 14px;
+    line-height: 1.52;
+    color: var(--text-secondary);
+  }
+
+  .showcase-subtitle strong {
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+
+  /* ======================================================================== */
+  /* Beat 2: Hub-and-Spoke Topology + Animated SVG Light Beams                */
+  /* ======================================================================== */
+  .topology-stage {
+    position: relative;
+    margin-top: 34px;
+  }
+
+  @media (min-width: 768px) {
+    .topology-stage { margin-top: 40px; }
+  }
+
+  .topology-svg {
+    display: none;
+    pointer-events: none;
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    width: 100%;
+    height: 214px;
+    z-index: 1;
+  }
+
+  @media (min-width: 840px) {
+    .topology-svg { display: block; }
+  }
+
+  .conn-path {
+    stroke: var(--line-stroke);
+    stroke-width: 1.15;
+    fill: none;
+    transition: stroke 0.2s ease, stroke-width 0.2s ease;
+  }
+
+  .conn-path.active {
+    stroke: var(--line-active);
+    stroke-width: 1.55;
+  }
+
+  .junction-dot {
+    fill: var(--node-fill);
+    stroke: var(--node-stroke);
+    stroke-width: 1.25;
+  }
+
+  .beam-pulse {
+    fill: none;
+    stroke-width: 1.85;
+    stroke-linecap: round;
+    stroke-dasharray: 15 120;
+    stroke-dashoffset: 16;
+    opacity: 0;
+    animation: beamTravel 4.2s ease-in-out infinite;
+  }
+
+  .beam-pulse.beam-short {
+    stroke-dasharray: 24 120;
+    stroke-dashoffset: 25;
+    animation-name: beamTravelShort;
+  }
+
+  .beam-pulse.beam-inactive {
+    opacity: 0 !important;
+    animation: none !important;
+  }
+
+  @keyframes beamTravel {
+    0%   { stroke-dashoffset: 16; opacity: 0; }
+    10%  { opacity: 0.92; }
+    56%  { opacity: 0.92; }
+    68%  { stroke-dashoffset: -102; opacity: 0; }
+    100% { stroke-dashoffset: -102; opacity: 0; }
+  }
+
+  @keyframes beamTravelShort {
+    0%   { stroke-dashoffset: 25; opacity: 0; }
+    10%  { opacity: 0.88; }
+    50%  { opacity: 0.88; }
+    64%  { stroke-dashoffset: -104; opacity: 0; }
+    100% { stroke-dashoffset: -104; opacity: 0; }
+  }
+
+  .hub-row {
+    position: relative;
+    z-index: 10;
+    display: grid;
+    grid-template-columns: 1fr;
+    align-items: center;
+    gap: 14px;
+  }
+
+  @media (min-width: 840px) {
+    .hub-row {
+      height: 136px;
+      grid-template-columns: 19.41% 1fr 19.41%;
+      gap: 0;
+    }
+  }
+
+  .hub-side {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  @media (min-width: 840px) {
+    .hub-side {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      height: 136px;
+      gap: 28px;
+    }
+  }
+
+  .node-pill {
+    position: relative;
+    z-index: 10;
+    width: 100%;
+    height: 54px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 9px;
+    padding: 0 13px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-primary);
+    box-shadow: var(--card-shadow);
+    cursor: pointer;
+    text-align: left;
+    font-family: var(--font-sans);
+    transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.16s var(--ease-smooth), background-color 0.18s ease;
+  }
+
+  .node-pill:hover {
+    border-color: var(--border-hover);
+    box-shadow: var(--card-shadow-hover);
+    transform: translateY(-1px);
+  }
+
+  .node-pill:active {
+    transform: scale(0.98);
+  }
+
+  .node-pill:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--ring-focus);
+  }
+
+  .node-pill.selected {
+    border-color: var(--line-active);
+    box-shadow: 0 0 0 3px var(--ring-focus), var(--card-shadow-hover);
+  }
+
+  .node-pill.empty-slot {
+    border-style: dashed;
+    opacity: 0.55;
+    cursor: default;
+    box-shadow: none;
+    justify-content: center;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .node-pill.empty-slot:hover {
+    transform: none;
+    box-shadow: none;
+    border-color: var(--border);
+  }
+
+  .node-os-icon {
+    width: 24px;
+    height: 24px;
+    border-radius: 7px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    background: var(--surface-inset);
+    color: var(--text-primary);
+  }
+
+  .node-pill-text {
+    min-width: 0;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .node-pill-name {
+    font-size: 12.5px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .node-pill-sub {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-muted);
+    line-height: 1.1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .status-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background: var(--text-faint);
+  }
+
+  .status-dot.online {
+    background: var(--ok);
+    box-shadow: 0 0 0 3px var(--ok-bg);
+  }
+
+  .hub-center-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px 0;
+  }
+
+  @media (min-width: 840px) {
+    .hub-center-wrap { padding: 0; }
+  }
+
+  .hub-bezel {
+    border-radius: 999px;
+    padding: 6px;
+    background: var(--hub-ring-bg);
+    border: 1px solid var(--hub-ring-border);
+    box-shadow: var(--hub-ring-shadow);
+    transition: transform 0.22s var(--ease-smooth), box-shadow 0.25s ease;
+  }
+
+  .hub-bezel.pulsing {
+    transform: scale(1.025);
+  }
+
+  .hub-core {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 11px;
+    padding: 13px 26px;
+    border-radius: 999px;
+    background: linear-gradient(180deg, #2B2B32 0%, #1B1B20 52%, #121216 100%);
+    color: #FFFFFF;
+    box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.25), inset 0 -2px 5px rgba(0, 0, 0, 0.55);
+    user-select: none;
+    cursor: pointer;
+    border: 0;
+    font-family: var(--font-sans);
+  }
+
+  .hub-core:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--ring-focus), inset 0 1px 1px rgba(255, 255, 255, 0.25);
+  }
+
+  .hub-label {
+    font-size: 18px;
+    font-weight: 500;
+    letter-spacing: -0.025em;
+    line-height: 1;
+    max-width: 175px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* ======================================================================== */
+  /* Beat 3: Bottom 3 Pastel Woven-Mesh Telemetry Cards                       */
+  /* ======================================================================== */
+  .pastel-grid {
+    position: relative;
+    z-index: 10;
+    margin-top: 28px;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+
+  @media (min-width: 840px) {
+    .pastel-grid {
+      margin-top: 78px;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+
+  .pastel-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    height: 368px;
+    overflow: hidden;
+    border-radius: 20px;
+    border: 3px solid var(--c1-border);
+    transition: box-shadow 0.26s ease, transform 0.22s var(--ease-smooth);
+  }
+
+  .pastel-card::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background-size: 5px 5px;
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.35) 30%, rgba(0,0,0,0.95) 100%);
+    mask-image: linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.35) 30%, rgba(0,0,0,0.95) 100%);
+    z-index: 1;
+  }
+
+  .pastel-card.card-lavender {
+    background: var(--c1-bg);
+    border-color: var(--c1-border);
+    box-shadow: var(--c1-shadow);
+  }
+  .pastel-card.card-lavender:hover { box-shadow: var(--c1-shadow-hover); }
+  .pastel-card.card-lavender::before {
+    background-image:
+      linear-gradient(to right, var(--c1-mesh) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--c1-mesh) 1px, transparent 1px);
+  }
+
+  .pastel-card.card-sky {
+    background: var(--c2-bg);
+    border-color: var(--c2-border);
+    box-shadow: var(--c2-shadow);
+  }
+  .pastel-card.card-sky:hover { box-shadow: var(--c2-shadow-hover); }
+  .pastel-card.card-sky::before {
+    background-image:
+      linear-gradient(to right, var(--c2-mesh) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--c2-mesh) 1px, transparent 1px);
+  }
+
+  .pastel-card.card-peach {
+    background: var(--c3-bg);
+    border-color: var(--c3-border);
+    box-shadow: var(--c3-shadow);
+  }
+  .pastel-card.card-peach:hover { box-shadow: var(--c3-shadow-hover); }
+  .pastel-card.card-peach::before {
+    background-image:
+      linear-gradient(to right, var(--c3-mesh) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--c3-mesh) 1px, transparent 1px);
+  }
+
+  .pastel-head {
+    position: relative;
+    z-index: 10;
+    padding: 22px 22px 0;
+  }
+
+  .pastel-title-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .pastel-icon { flex-shrink: 0; }
+  .card-lavender .pastel-icon { color: var(--c1-icon); }
+  .card-sky .pastel-icon { color: var(--c2-icon); }
+  .card-peach .pastel-icon { color: var(--c3-icon); }
+
+  .pastel-title {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: var(--text-primary);
+  }
+
+  .pastel-desc {
+    margin: 7px 0 0;
+    font-size: 12.5px;
+    line-height: 1.48;
+    color: var(--text-secondary);
+  }
+
+  .pastel-stage {
+    position: relative;
+    z-index: 10;
+    margin-top: auto;
+    height: 232px;
+    width: 100%;
+  }
+
+  /* Card 1 Inner Composition (Lavender — Fleet Pulse) */
+  .c1-bezel {
+    position: absolute;
+    bottom: 16px;
+    left: 22px;
+    right: -16px;
+    z-index: 10;
+    border-radius: 16px;
+    padding: 4px;
+    background: var(--c1-bezel-bg);
+    border: 1px solid var(--c1-bezel-border);
+    box-shadow: 0 12px 28px -10px rgba(55, 25, 95, 0.12);
+  }
+
+  .c1-inner {
+    border-radius: 12px;
+    border: 1px solid var(--c1-inner-border);
+    background: var(--c1-inner-bg);
+    padding: 15px 16px;
+  }
+
+  .c1-inner-label {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-secondary);
+  }
+
+  .seg-bar {
+    margin-top: 11px;
+    height: 17px;
+    width: 100%;
+    display: flex;
+    overflow: hidden;
+    border-radius: 5px;
+    background: var(--surface-inset);
+    isolation: isolate;
+  }
+
+  .seg-part {
+    position: relative;
+    height: 100%;
+    cursor: pointer;
+    border: 0;
+    padding: 0;
+    transition: opacity 0.18s ease, width 0.55s var(--ease-smooth);
+  }
+
+  .seg-part:first-child {
+    z-index: 2;
+    border-radius: 0 999px 999px 0;
+  }
+
+  .seg-part.dimmed {
+    opacity: 0.32;
+  }
+
+  .c1-kpis {
+    margin-top: 15px;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+    padding-right: 18px;
+  }
+
+  .c1-kpi-item {
+    cursor: pointer;
+    background: transparent;
+    border: 0;
+    padding: 0;
+    text-align: left;
+    font-family: var(--font-sans);
+    transition: opacity 0.16s ease;
+  }
+
+  .c1-kpi-item.dimmed { opacity: 0.42; }
+
+  .c1-kpi-num {
+    font-size: 24px;
+    font-weight: 300;
+    line-height: 1;
+    letter-spacing: -0.03em;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-primary);
+  }
+
+  .c1-kpi-lbl {
+    margin-top: 5px;
+    font-size: 9.5px;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .c1-float-pop {
+    position: absolute;
+    right: 20px;
+    top: 4px;
+    z-index: 30;
+    width: 146px;
+    border-radius: 14px;
+    border: 1px solid var(--c1-pop-border);
+    background: var(--c1-pop-bg);
+    box-shadow: var(--c1-pop-shadow);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    padding: 12px 14px;
+    cursor: pointer;
+    text-align: left;
+    font-family: var(--font-sans);
+    transition: transform 0.22s var(--ease-smooth);
+  }
+
+  .card-lavender:hover .c1-float-pop {
+    transform: translateY(-4px);
+  }
+
+  .pop-kicker {
+    font-size: 9.5px;
+    font-weight: 500;
+    color: var(--text-secondary);
+  }
+
+  .pop-metric {
+    margin-top: 5px;
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+  }
+
+  .pop-big {
+    font-size: 36px;
+    font-weight: 300;
+    line-height: 1;
+    letter-spacing: -0.045em;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-primary);
+  }
+
+  .pop-unit {
+    font-size: 13.5px;
+    font-weight: 400;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .pop-sub {
+    margin-top: 8px;
+    font-size: 9.5px;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Card 2 Inner Composition (Sky Blue — Resource Telemetry) */
+  .c2-bg-table {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 10;
+    height: 152px;
+    border-top: 1px solid var(--c2-table-border);
+    background: var(--c2-table-bg);
+    padding: 11px 16px 0;
+    color: var(--text-secondary);
+    font-size: 9.5px;
+  }
+
+  .c2-bg-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 7.5px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+  }
+
+  .c2-bg-rows {
+    margin-top: 7px;
+  }
+
+  .c2-bg-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--c2-table-div);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .c2-bg-row:last-child { border-bottom: 0; }
+
+  .c2-bg-host {
+    font-weight: 500;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 115px;
+  }
+
+  .c2-bg-stats {
+    font-family: var(--font-mono);
+    font-size: 8.5px;
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+
+  .c2-float-pop {
+    position: absolute;
+    left: 50%;
+    top: 6px;
+    transform: translateX(-50%);
+    z-index: 30;
+    width: 214px;
+    border-radius: 14px;
+    border: 1px solid var(--c2-pop-border);
+    background: var(--c2-pop-bg);
+    box-shadow: var(--c2-pop-shadow);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    padding: 13px 15px;
+    transition: transform 0.22s var(--ease-smooth);
+  }
+
+  .card-sky:hover .c2-float-pop {
+    transform: translate(-50%, -4px);
+  }
+
+  .c2-pop-title {
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: -0.015em;
+    color: var(--text-primary);
+  }
+
+  .c2-bars {
+    margin-top: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+  }
+
+  .c2-bar-item {
+    display: block;
+    width: 100%;
+    background: transparent;
+    border: 0;
+    padding: 0;
+    text-align: left;
+    cursor: pointer;
+    font-family: var(--font-sans);
+    transition: opacity 0.16s ease;
+  }
+
+  .c2-bar-item.dimmed { opacity: 0.4; }
+
+  .c2-bar-label {
+    font-size: 9px;
+    font-weight: 500;
+    line-height: 1.1;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .c2-bar-row {
+    margin-top: 5px;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+  }
+
+  .c2-track {
+    flex: 1;
+    height: 4.5px;
+    border-radius: 999px;
+    background: var(--c2-track);
+    overflow: hidden;
+  }
+
+  .c2-fill {
+    height: 100%;
+    border-radius: 999px;
+    transition: width 0.6s var(--ease-smooth);
+  }
+
+  .c2-pct {
+    width: 28px;
+    text-align: right;
+    font-family: var(--font-mono);
+    font-size: 8.5px;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-muted);
+  }
+
+  /* Card 3 Inner Composition (Peach — Keys & Traffic) */
+  .c3-bezel {
+    position: absolute;
+    bottom: 0;
+    left: 56px;
+    right: -10px;
+    top: 2px;
+    z-index: 10;
+    border-top-left-radius: 18px;
+    border-left: 1px solid var(--c3-bezel-border);
+    border-top: 1px solid var(--c3-bezel-border);
+    background: var(--c3-bezel-bg);
+    padding: 4px 0 0 4px;
+  }
+
+  .c3-inner {
+    height: 100%;
+    width: 100%;
+    border-top-left-radius: 14px;
+    border-left: 1px solid var(--c3-inner-border);
+    border-top: 1px solid var(--c3-inner-border);
+    background: var(--c3-inner-bg);
+    padding: 11px 16px 0;
+  }
+
+  .c3-greeting {
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: -0.015em;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .c3-mini-wrap {
+    margin-top: 10px;
+    display: flex;
+    justify-content: flex-end;
+    padding-right: 4px;
+  }
+
+  .c3-mini-card {
+    width: 102px;
+    border-radius: 12px;
+    border: 1px solid var(--c3-mini-border);
+    background: var(--c3-mini-bg);
+    box-shadow: 0 8px 20px -8px rgba(90, 45, 15, 0.08);
+    padding: 9px 10px;
+  }
+
+  .c3-mini-kicker {
+    font-size: 8.5px;
+    font-weight: 500;
+    color: var(--text-secondary);
+  }
+
+  .c3-mini-val {
+    margin-top: 5px;
+    display: flex;
+    align-items: baseline;
+    gap: 2px;
+  }
+
+  .c3-mini-num {
+    font-size: 22px;
+    font-weight: 300;
+    line-height: 1;
+    letter-spacing: -0.04em;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-primary);
+  }
+
+  .c3-mini-unit {
+    font-size: 10.5px;
+    color: var(--text-muted);
+  }
+
+  .c3-mini-sub {
+    margin-top: 6px;
+    font-family: var(--font-mono);
+    font-size: 7.5px;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .c3-table {
+    margin-top: 14px;
+    padding-right: 10px;
+  }
+
+  .c3-table-title {
+    font-size: 9px;
+    font-weight: 500;
+    color: var(--text-secondary);
+  }
+
+  .c3-table-cols {
+    margin-top: 5px;
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    gap: 8px;
+    font-size: 6.8px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-faint);
+  }
+
+  .c3-table-row {
+    margin-top: 5px;
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    align-items: center;
+    gap: 8px;
+    font-size: 8px;
+    color: var(--text-secondary);
+  }
+
+  .c3-table-host {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--text-primary);
+  }
+
+  .c3-float-pop {
+    position: absolute;
+    left: 14px;
+    top: 38px;
+    z-index: 30;
+    width: 152px;
+    border-radius: 14px;
+    border: 1px solid var(--c3-pop-border);
+    background: var(--c3-pop-bg);
+    box-shadow: var(--c3-pop-shadow);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    padding: 12px 13px;
+    cursor: pointer;
+    text-align: left;
+    font-family: var(--font-sans);
+    transition: transform 0.22s var(--ease-smooth);
+  }
+
+  .card-peach:hover .c3-float-pop {
+    transform: translateY(-4px);
+  }
+
+  .c3-alert-foot {
+    margin-top: 9px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .alert-badge-dot {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--danger);
+    color: #FFFFFF;
+    font-size: 9px;
+    font-weight: 700;
+    line-height: 1;
+    flex-shrink: 0;
+  }
+
+  .alert-badge-dot.ok {
+    background: var(--ok);
+  }
+
+  .c3-alert-txt {
+    font-size: 9px;
+    line-height: 1.2;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* ======================================================================== */
+  /* Fleet Section (Architectural Crisp Cards)                                */
+  /* ======================================================================== */
+  .fleet-shell {
+    padding: 22px 18px 28px;
+  }
+
+  @media (min-width: 640px) {
+    .fleet-shell { padding: 26px 28px 34px; }
+  }
+
+  @media (min-width: 1024px) {
+    .fleet-shell { padding: 28px 36px 38px; }
+  }
+
+  .fleet-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    margin-bottom: 18px;
+  }
+
+  .fleet-title-group {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .fleet-title {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: -0.025em;
+    color: var(--text-primary);
+  }
+
+  .count-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    font-size: 11.5px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .active-filter-chip {
+    display: none;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 9px 3px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--info-border);
+    background: var(--info-bg);
+    color: var(--info-text);
+    font-size: 11.5px;
+    font-weight: 500;
+    cursor: pointer;
+    font-family: var(--font-sans);
+  }
+
+  .active-filter-chip.visible {
+    display: inline-flex;
+  }
+
+  .fleet-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    flex: 1 1 320px;
+    justify-content: flex-end;
+  }
+
+  .search-wrap {
+    position: relative;
+    flex: 1 1 220px;
+    max-width: 340px;
+  }
+
+  .search-icon {
+    position: absolute;
+    left: 11px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-faint);
+    pointer-events: none;
+  }
+
+  .search-input {
+    width: 100%;
+    height: 36px;
+    padding: 0 34px 0 32px;
+    border-radius: 999px;
+    border: 1px solid var(--border-strong);
+    background: var(--surface);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    outline: none;
+    transition: border-color 0.16s ease, box-shadow 0.16s ease;
+  }
+
+  .search-input::placeholder { color: var(--text-faint); }
+
+  .search-input:focus {
+    border-color: var(--text-primary);
+    box-shadow: 0 0 0 3px var(--ring-focus);
+  }
+
+  .search-kbd {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    color: var(--text-faint);
+    border: 1px solid var(--border);
+    background: var(--surface-soft);
+    border-radius: 5px;
+    padding: 1px 5px;
+    pointer-events: none;
+  }
+
+  .filter-tabs {
+    display: inline-flex;
+    align-items: center;
+    height: 36px;
+    padding: 3px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    gap: 2px;
+  }
+
+  .filter-tab {
+    appearance: none;
+    border: 0;
+    background: transparent;
+    color: var(--text-secondary);
+    height: 28px;
+    padding: 0 11px;
+    border-radius: 999px;
+    font-family: var(--font-sans);
+    font-size: 12px;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    cursor: pointer;
+    transition: background-color 0.16s ease, color 0.16s ease;
+    white-space: nowrap;
+  }
+
+  .filter-tab:hover { color: var(--text-primary); }
+
+  .filter-tab.active {
+    background: var(--text-primary);
+    color: var(--page-bg);
+  }
+
+  .filter-tab.tab-warn:not(.active) {
+    color: var(--danger);
+  }
+
+  /* Stale Banner */
+  .stale-banner {
+    display: none;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 16px;
+    padding: 11px 15px;
+    border-radius: 14px;
+    border: 1px solid var(--warn-border);
+    background: var(--warn-bg);
+    color: var(--warn-text);
+    font-size: 12.5px;
+  }
+
+  .stale-banner.visible { display: flex; }
+  .stale-err { font-family: var(--font-mono); font-size: 11.5px; opacity: 0.9; }
+
+  /* Fleet Card Grid */
+  .fleet-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 16px;
+  }
+
+  @media (max-width: 420px) {
+    .fleet-grid { grid-template-columns: 1fr; }
+  }
+
+  .dev-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 13px;
+    padding: 18px;
+    border-radius: 18px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    box-shadow: var(--card-shadow);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.18s var(--ease-smooth), opacity 0.2s ease;
+  }
+
+  .dev-card:hover {
+    border-color: var(--border-hover);
+    box-shadow: var(--card-shadow-hover);
+  }
+
+  .dev-card.offline {
+    background: var(--surface-offline);
+    opacity: 0.80;
+    box-shadow: none;
+  }
+
+  .dev-card.offline:hover {
+    opacity: 1;
+    box-shadow: var(--card-shadow);
+  }
+
+  .dev-card.spotlight {
+    border-color: var(--seg-blue);
+    box-shadow: 0 0 0 3px var(--spotlight-ring), var(--card-shadow-hover);
+  }
+
+  .dev-head {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .dev-host-line {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .dev-host-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    flex: 1;
+  }
+
+  .dev-hostname {
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .dev-badges {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 7px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--surface-soft);
+    color: var(--text-secondary);
+    font-size: 10.5px;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+
+  .tag-self {
+    border-color: var(--info-border);
+    background: var(--info-bg);
+    color: var(--info-text);
+    font-weight: 600;
+  }
+
+  .tag-active {
+    border-color: var(--ok-border);
+    background: var(--ok-bg);
+    color: var(--ok-text);
+    font-weight: 600;
+  }
+
+  .tag-note {
+    border-color: var(--warn-border);
+    background: var(--warn-bg);
+    color: var(--warn-text);
+    font-weight: 600;
+  }
+
+  .dev-net {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 7px;
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    min-width: 0;
+  }
+
+  .ip-copy-btn {
+    appearance: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 8px;
+    border-radius: 7px;
+    border: 1px solid var(--border);
+    background: var(--surface-inset);
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    font-variant-numeric: tabular-nums;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: border-color 0.15s ease, background-color 0.15s ease;
+  }
+
+  .ip-copy-btn:hover {
+    border-color: var(--border-hover);
+    background: var(--surface);
+  }
+
+  .ip-copy-btn.copied {
+    border-color: var(--ok-border);
+    background: var(--ok-bg);
+    color: var(--ok-text);
+  }
+
+  .dns-short {
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .relay-pill {
+    margin-left: auto;
+    padding: 2px 7px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--surface-soft);
+    color: var(--text-muted);
+    font-size: 10.5px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    flex-shrink: 0;
+  }
+
+  /* Expiry Banner Inside Device Card */
+  .dev-expiry-alert {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 11px;
+    border-radius: 10px;
+    font-size: 11.5px;
+    font-weight: 500;
+  }
+
+  .dev-expiry-alert.warn {
+    border: 1px solid var(--warn-border);
+    background: var(--warn-bg);
+    color: var(--warn-text);
+  }
+
+  .dev-expiry-alert.danger {
+    border: 1px solid var(--danger-border);
+    background: var(--danger-bg);
+    color: var(--danger-text);
+  }
+
+  .dev-expiry-left {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  /* Inner Frosted Spec Tray */
+  .spec-tray {
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: var(--surface-inset);
+    padding: 12px 13px;
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+  }
+
+  .kv-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    font-size: 12px;
+  }
+
+  .kv-k {
+    color: var(--text-muted);
+    flex-shrink: 0;
+  }
+
+  .kv-v {
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .meter-block {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .meter-top {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 11.5px;
+  }
+
+  .meter-lbl {
+    font-family: var(--font-mono);
+    color: var(--text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .meter-val {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-primary);
+    flex-shrink: 0;
+  }
+
+  .meter-track {
+    height: 6px;
+    border-radius: 999px;
+    background: var(--border);
+    overflow: hidden;
+  }
+
+  .meter-fill {
+    height: 100%;
+    border-radius: 999px;
+    background: var(--seg-blue);
+    transition: width 0.35s var(--ease-smooth);
+  }
+
+  .meter-fill.warn { background: #E3A73B; }
+  .meter-fill.danger { background: var(--danger); }
+
+  .spec-unavail {
+    border-radius: 10px;
+    border: 1px solid var(--danger-border);
+    background: var(--danger-bg);
+    color: var(--danger-text);
+    padding: 8px 11px;
+    font-size: 11.5px;
+  }
+
+  .spec-na {
+    font-size: 11.5px;
+    color: var(--text-muted);
+    padding: 2px 0;
+  }
+
+  .dev-foot {
+    margin-top: auto;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 6px 12px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-muted);
+  }
+
+  .empty-state {
+    grid-column: 1 / -1;
+    padding: 42px 20px;
+    text-align: center;
+    border-radius: 16px;
+    border: 1px dashed var(--border-strong);
+    color: var(--text-muted);
+    font-size: 13px;
+  }
+
+  /* Entrance Animation */
+  .reveal {
+    animation: fadeUp 0.5s var(--ease-smooth) both;
+  }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .beam-pulse { animation: none !important; opacity: 0 !important; }
+    .reveal { animation: none !important; }
+    *, *::before, *::after { transition-duration: 0.01ms !important; }
+  }
+</style>
+</head>
+<body>
+  <div class="page-wrap">
+    <!-- ================================================================== -->
+    <!-- HERO ARCHITECTURAL SHOWCASE SHELL                                  -->
+    <!-- ================================================================== -->
+    <section class="arch-shell hero-shell reveal" aria-labelledby="hero-heading">
+      <!-- Slim Top Utility Bar -->
+      <div class="utility-bar">
+        <div class="utility-left">
+          <span class="brand-mini">
+            <span class="brand-mini-mark" aria-hidden="true">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                <rect x="10.2" y="2.2" width="3.6" height="3.6" rx="1" fill="#FFFFFF"/>
+                <rect x="10.2" y="18.2" width="3.6" height="3.6" rx="1" fill="#FFFFFF"/>
+                <rect x="2.2" y="10.2" width="3.6" height="3.6" rx="1" fill="#FFFFFF"/>
+                <rect x="18.2" y="10.2" width="3.6" height="3.6" rx="1" fill="#FFFFFF"/>
+                <rect x="4.8" y="4.8" width="3.4" height="3.4" rx="1" fill="#FFFFFF" fill-opacity="0.88"/>
+                <rect x="15.8" y="4.8" width="3.4" height="3.4" rx="1" fill="#FFFFFF" fill-opacity="0.88"/>
+                <rect x="4.8" y="15.8" width="3.4" height="3.4" rx="1" fill="#FFFFFF" fill-opacity="0.88"/>
+                <rect x="15.8" y="15.8" width="3.4" height="3.4" rx="1" fill="#FFFFFF" fill-opacity="0.88"/>
+              </svg>
+            </span>
+            <span>Tailscale Monitor</span>
+          </span>
+          <span class="meta-sep" aria-hidden="true"></span>
+          <span id="collectedMeta" class="utility-meta">Syncing snapshot…</span>
+          <span id="collectorMeta" class="utility-meta" style="display:none"></span>
+        </div>
+
+        <div class="utility-right">
+          <span class="countdown-pill" title="Auto-refresh interval">
+            <span id="liveDot" class="countdown-dot" aria-hidden="true"></span>
+            <span id="countdownText">60s</span>
+          </span>
+
+          <button id="refreshBtn" class="btn" type="button">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M21 12a9 9 0 1 1-2.64-6.36"/>
+              <polyline points="21 3 21 9 15 9"/>
+            </svg>
+            <span id="refreshLabel">Refresh</span>
+          </button>
+
+          <div class="theme-switch" role="group" aria-label="Color theme">
+            <button class="theme-btn" type="button" data-theme-choice="light">Light</button>
+            <button class="theme-btn" type="button" data-theme-choice="dark">Dark</button>
+            <button class="theme-btn" type="button" data-theme-choice="auto">Auto</button>
+          </div>
+
+          <form id="logoutForm" method="POST" action="/logout" style="display:none;margin:0">
+            <button class="btn btn-ghost" type="submit">Logout</button>
+          </form>
+        </div>
+      </div>
+
+      <!-- Beat 1: Centered Showcase Header -->
+      <header class="showcase-header">
+        <div class="eyebrow-pill">
+          <span class="eyebrow-dot-outer" aria-hidden="true">
+            <span id="eyebrowDot" class="eyebrow-dot-inner"></span>
+          </span>
+          <span id="eyebrowText">TAILNET TELEMETRY</span>
+        </div>
+
+        <h1 id="hero-heading" class="showcase-title">
+          Monitor every tailnet node,<br>live in one view
+        </h1>
+
+        <p id="heroSubtitle" class="showcase-subtitle">
+          Live WireGuard mesh status, parallel SSH host telemetry, storage pressure, and key expiry alerts across your private fleet.
+        </p>
+      </header>
+
+      <!-- Beat 2: Hub-and-Spoke Topology + Connector SVG -->
+      <div class="topology-stage">
+        <svg class="topology-svg" aria-hidden="true" viewBox="0 0 948 214" fill="none" preserveAspectRatio="none">
+          <!-- Left Top -> Left Junction -->
+          <path id="path-node-0" class="conn-path" vector-effect="non-scaling-stroke" d="M 184 27 L 250 27 Q 264 27 264 41 L 264 68"/>
+          <!-- Left Bottom -> Left Junction -->
+          <path id="path-node-1" class="conn-path" vector-effect="non-scaling-stroke" d="M 184 109 L 250 109 Q 264 109 264 95 L 264 68"/>
+          <!-- Left Junction -> Center Hub -->
+          <path id="path-left-arm" class="conn-path" vector-effect="non-scaling-stroke" d="M 264 68 L 410 68"/>
+
+          <!-- Right Top -> Right Junction -->
+          <path id="path-node-2" class="conn-path" vector-effect="non-scaling-stroke" d="M 764 27 L 698 27 Q 684 27 684 41 L 684 68"/>
+          <!-- Right Bottom -> Right Junction -->
+          <path id="path-node-3" class="conn-path" vector-effect="non-scaling-stroke" d="M 764 109 L 698 109 Q 684 109 684 95 L 684 68"/>
+          <!-- Right Junction -> Center Hub -->
+          <path id="path-right-arm" class="conn-path" vector-effect="non-scaling-stroke" d="M 684 68 L 538 68"/>
+
+          <!-- Center Hub -> Bottom Junction -->
+          <path id="path-stem" class="conn-path" vector-effect="non-scaling-stroke" d="M 474 104 L 474 166"/>
+
+          <!-- Bottom Junction -> Card 1 / 2 / 3 -->
+          <path id="path-card-0" class="conn-path" vector-effect="non-scaling-stroke" d="M 474 166 L 166 166 Q 152 166 152 180 L 152 214"/>
+          <path id="path-card-1" class="conn-path" vector-effect="non-scaling-stroke" d="M 474 166 L 474 214"/>
+          <path id="path-card-2" class="conn-path" vector-effect="non-scaling-stroke" d="M 474 166 L 782 166 Q 796 166 796 180 L 796 214"/>
+
+          <!-- Continuous Animated Colored Light-Beam Pulses -->
+          <path id="beam-node-0" class="beam-pulse" pathLength="100" vector-effect="non-scaling-stroke" stroke="#F06A6A" style="animation-delay: 0.4s" d="M 184 27 L 250 27 Q 264 27 264 41 L 264 68 L 410 68"/>
+          <path id="beam-node-1" class="beam-pulse" pathLength="100" vector-effect="non-scaling-stroke" stroke="#FFCB00" style="animation-delay: 1.4s" d="M 184 109 L 250 109 Q 264 109 264 95 L 264 68 L 410 68"/>
+          <path id="beam-node-2" class="beam-pulse" pathLength="100" vector-effect="non-scaling-stroke" stroke="#0079BF" style="animation-delay: 0.9s" d="M 764 27 L 698 27 Q 684 27 684 41 L 684 68 L 538 68"/>
+          <path id="beam-node-3" class="beam-pulse" pathLength="100" vector-effect="non-scaling-stroke" stroke="#7B68EE" style="animation-delay: 1.9s" d="M 764 109 L 698 109 Q 684 109 684 95 L 684 68 L 538 68"/>
+
+          <path class="beam-pulse" pathLength="100" vector-effect="non-scaling-stroke" stroke="#B884EB" style="animation-delay: 2.3s" d="M 474 104 L 474 166 L 166 166 Q 152 166 152 180 L 152 214"/>
+          <path class="beam-pulse beam-short" pathLength="100" vector-effect="non-scaling-stroke" stroke="#72A4F5" style="animation-delay: 2.6s" d="M 474 104 L 474 214"/>
+          <path class="beam-pulse" pathLength="100" vector-effect="non-scaling-stroke" stroke="#E68D6A" style="animation-delay: 2.9s" d="M 474 104 L 474 166 L 782 166 Q 796 166 796 180 L 796 214"/>
+
+          <!-- Junction Nodes -->
+          <circle class="junction-dot" cx="264" cy="68" r="3"/>
+          <circle class="junction-dot" cx="684" cy="68" r="3"/>
+          <circle class="junction-dot" cx="474" cy="166" r="3"/>
+        </svg>
+
+        <!-- Hub Row: 2 Left Nodes | Center Obsidian Hub | 2 Right Nodes -->
+        <div class="hub-row">
+          <div id="hubLeft" class="hub-side">
+            <div class="node-pill empty-slot">Loading…</div>
+            <div class="node-pill empty-slot">Loading…</div>
+          </div>
+
+          <div class="hub-center-wrap">
+            <div id="hubBezel" class="hub-bezel">
+              <button id="hubResetBtn" class="hub-core" type="button" title="Show all devices">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <rect x="10.2" y="2.2" width="3.6" height="3.6" rx="1" fill="#FFFFFF"/>
+                  <rect x="10.2" y="18.2" width="3.6" height="3.6" rx="1" fill="#FFFFFF"/>
+                  <rect x="2.2" y="10.2" width="3.6" height="3.6" rx="1" fill="#FFFFFF"/>
+                  <rect x="18.2" y="10.2" width="3.6" height="3.6" rx="1" fill="#FFFFFF"/>
+                  <rect x="4.8" y="4.8" width="3.4" height="3.4" rx="1" fill="#FFFFFF" fill-opacity="0.92"/>
+                  <rect x="15.8" y="4.8" width="3.4" height="3.4" rx="1" fill="#FFFFFF" fill-opacity="0.92"/>
+                  <rect x="4.8" y="15.8" width="3.4" height="3.4" rx="1" fill="#FFFFFF" fill-opacity="0.92"/>
+                  <rect x="15.8" y="15.8" width="3.4" height="3.4" rx="1" fill="#FFFFFF" fill-opacity="0.92"/>
+                </svg>
+                <span id="hubLabel" class="hub-label">tailmon</span>
+              </button>
+            </div>
+          </div>
+
+          <div id="hubRight" class="hub-side">
+            <div class="node-pill empty-slot">Loading…</div>
+            <div class="node-pill empty-slot">Loading…</div>
+          </div>
+        </div>
+
+        <!-- Beat 3: Bottom 3 Pastel Woven-Mesh Telemetry Cards -->
+        <div class="pastel-grid">
+          <!-- CARD 1: Lavender — Fleet Pulse -->
+          <article class="pastel-card card-lavender" data-pastel-card="0">
+            <div class="pastel-head">
+              <div class="pastel-title-row">
+                <svg class="pastel-icon" width="17" height="17" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+                  <path d="M9 2.2C9 2.2 4 7.7 4 11.2C4 14 6.24 16.2 9 16.2C11.76 16.2 14 14 14 11.2C14 7.7 9 2.2 9 2.2Z" stroke="currentColor" stroke-opacity="0.32" stroke-width="1.35" stroke-linejoin="round"/>
+                  <path d="M5.15 11.7H12.85C12.55 13.65 10.95 15.1 9 15.1C7.05 15.1 5.45 13.65 5.15 11.7Z" fill="currentColor"/>
+                </svg>
+                <h2 class="pastel-title">Fleet pulse</h2>
+              </div>
+              <p class="pastel-desc">
+                Real-time online presence, active tunnels, and SSH probe coverage across your tailnet.
+              </p>
+            </div>
+
+            <div class="pastel-stage">
+              <div class="c1-bezel">
+                <div class="c1-inner">
+                  <div class="c1-inner-label">Device states</div>
+                  <div id="fleetSegBar" class="seg-bar" role="group" aria-label="Device state distribution"></div>
+                  <div id="fleetKpis" class="c1-kpis"></div>
+                </div>
+              </div>
+
+              <button id="c1OnlinePop" class="c1-float-pop" type="button" title="Filter online devices">
+                <div class="pop-kicker">Online nodes</div>
+                <div class="pop-metric">
+                  <span id="popOnlineCount" class="pop-big">—</span>
+                  <span id="popTotalCount" class="pop-unit">/ —</span>
+                </div>
+                <div id="popOnlineSub" class="pop-sub">Loading mesh…</div>
+              </button>
+            </div>
+          </article>
+
+          <!-- CARD 2: Sky Blue — Resource Telemetry -->
+          <article class="pastel-card card-sky" data-pastel-card="1">
+            <div class="pastel-head">
+              <div class="pastel-title-row">
+                <svg class="pastel-icon" width="17" height="17" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+                  <rect x="2.6" y="3.2" width="12.8" height="12.6" rx="2.6" stroke="currentColor" stroke-opacity="0.32" stroke-width="1.3"/>
+                  <path d="M6.8 3.2V2.4C6.8 2.07 7.07 1.8 7.4 1.8H10.6C10.93 1.8 11.2 2.07 11.2 2.4V3.2" stroke="currentColor" stroke-opacity="0.38" stroke-width="1.25" stroke-linecap="round"/>
+                  <path d="M10.95 6.35L12.15 7.55L7.95 11.75L6.2 12.25L6.7 10.5L10.95 6.35Z" fill="currentColor"/>
+                </svg>
+                <h2 class="pastel-title">Resource telemetry</h2>
+              </div>
+              <p class="pastel-desc">
+                Peak memory and storage utilization ranked across live SSH-probed nodes.
+              </p>
+            </div>
+
+            <div class="pastel-stage">
+              <div class="c2-bg-table">
+                <div class="c2-bg-head">
+                  <span>Probed host</span>
+                  <span>Cores · Load · Uptime</span>
+                </div>
+                <div id="c2BgRows" class="c2-bg-rows"></div>
+              </div>
+
+              <div class="c2-float-pop">
+                <div class="c2-pop-title">Peak utilization</div>
+                <div id="c2Bars" class="c2-bars"></div>
+              </div>
+            </div>
+          </article>
+
+          <!-- CARD 3: Peach / Apricot — Keys & Traffic -->
+          <article class="pastel-card card-peach" data-pastel-card="2">
+            <div class="pastel-head">
+              <div class="pastel-title-row">
+                <svg class="pastel-icon" width="16" height="16" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+                  <rect x="2.2" y="2.2" width="5.6" height="5.6" rx="1.4" fill="currentColor"/>
+                  <rect x="10.2" y="2.2" width="5.6" height="5.6" rx="1.4" stroke="currentColor" stroke-opacity="0.32" stroke-width="1.3"/>
+                  <rect x="2.2" y="10.2" width="5.6" height="5.6" rx="1.4" stroke="currentColor" stroke-opacity="0.32" stroke-width="1.3"/>
+                  <rect x="10.2" y="10.2" width="5.6" height="5.6" rx="1.4" stroke="currentColor" stroke-opacity="0.32" stroke-width="1.3"/>
+                </svg>
+                <h2 class="pastel-title">Keys &amp; traffic</h2>
+              </div>
+              <p class="pastel-desc">
+                Spot expiring Tailscale keys early alongside cumulative tunnel I/O and relays.
+              </p>
+            </div>
+
+            <div class="pastel-stage">
+              <div class="c3-bezel">
+                <div class="c3-inner">
+                  <div id="c3TailnetName" class="c3-greeting">Tailnet overview</div>
+
+                  <div class="c3-mini-wrap">
+                    <div class="c3-mini-card">
+                      <div class="c3-mini-kicker">Total traffic</div>
+                      <div class="c3-mini-val">
+                        <span id="c3TrafficNum" class="c3-mini-num">—</span>
+                        <span id="c3TrafficUnit" class="c3-mini-unit"></span>
+                      </div>
+                      <div id="c3TrafficSplit" class="c3-mini-sub">TX — · RX —</div>
+                    </div>
+                  </div>
+
+                  <div class="c3-table">
+                    <div class="c3-table-title">Upcoming key expiries</div>
+                    <div class="c3-table-cols">
+                      <span>Device</span>
+                      <span>Relay</span>
+                      <span>Date</span>
+                    </div>
+                    <div id="c3ExpiryRows"></div>
+                  </div>
+                </div>
+              </div>
+
+              <button id="c3ExpiryPop" class="c3-float-pop" type="button" title="Inspect soonest expiring key">
+                <div class="pop-kicker">Soonest key expiry</div>
+                <div class="pop-metric">
+                  <span id="c3DaysNum" class="pop-big">—</span>
+                  <span id="c3DaysUnit" class="pop-unit">days</span>
+                </div>
+                <div class="c3-alert-foot">
+                  <span id="c3AlertDot" class="alert-badge-dot" aria-hidden="true">!</span>
+                  <span id="c3AlertText" class="c3-alert-txt">Checking keys…</span>
+                </div>
+              </button>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================== -->
+    <!-- DEVICE FLEET ARCHITECTURAL SHELL                                   -->
+    <!-- ================================================================== -->
+    <section id="fleetSection" class="arch-shell fleet-shell reveal" style="animation-delay: 0.08s" aria-labelledby="fleet-heading">
+      <div class="fleet-header">
+        <div class="fleet-title-group">
+          <h2 id="fleet-heading" class="fleet-title">Device Fleet</h2>
+          <span id="fleetCountChip" class="count-chip">Loading…</span>
+          <button id="activeFilterChip" class="active-filter-chip" type="button" title="Clear active selection">
+            <span id="activeFilterLabel"></span>
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+
+        <div class="fleet-controls">
+          <div class="search-wrap">
+            <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="11" cy="11" r="8"/>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            <input id="searchInput" class="search-input" type="search" placeholder="Filter hostname, IP, OS, relay, CPU…" autocomplete="off">
+            <span class="search-kbd">/</span>
+          </div>
+
+          <div class="filter-tabs" role="tablist" aria-label="Device status filter">
+            <button class="filter-tab active" data-filter="all" type="button">All (<span id="countAll">0</span>)</button>
+            <button class="filter-tab" data-filter="online" type="button">Online (<span id="countOnline">0</span>)</button>
+            <button class="filter-tab" data-filter="offline" type="button">Offline (<span id="countOffline">0</span>)</button>
+            <button id="tabExpiring" class="filter-tab tab-warn" data-filter="expiring" type="button" style="display:none">Expiring (<span id="countExpiring">0</span>)</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="staleBanner" class="stale-banner" role="alert">
+        <div>
+          <strong>Stale snapshot</strong> — Last collector poll failed; displaying cached fleet state.
+        </div>
+        <div id="staleErr" class="stale-err"></div>
+      </div>
+
+      <main id="fleetGrid" class="fleet-grid">
+        <div class="empty-state">Loading tailnet devices…</div>
+      </main>
+    </section>
+  </div>
+
+<script>
+(function () {
+  const REFRESH_SECONDS = 60;
+  const SEG_COLORS = {
+    active: '#7DA9F7',
+    idle: '#B884EB',
+    recent: '#EE9777',
+    dormant: '#E9CC65'
+  };
+
+  let snapshot = null;
+  let statusFilter = 'all'; // 'all' | 'online' | 'offline' | 'active' | 'expiring'
+  let searchQuery = '';
+  let selectedHubIdx = null;
+  let hoveredHubIdx = null;
+  let hoveredCardIdx = null;
+  let hoveredSegKey = null;
+  let hoveredBarIdx = null;
+  let spotlightDeviceId = null;
+  let hubDevices = [];
+  let secondsLeft = REFRESH_SECONDS;
+  let isFetching = false;
+
+  // DOM references
+  const elCollectedMeta = document.getElementById('collectedMeta');
+  const elCollectorMeta = document.getElementById('collectorMeta');
+  const elLiveDot = document.getElementById('liveDot');
+  const elCountdownText = document.getElementById('countdownText');
+  const elRefreshBtn = document.getElementById('refreshBtn');
+  const elRefreshLabel = document.getElementById('refreshLabel');
+  const elLogoutForm = document.getElementById('logoutForm');
+  const elEyebrowDot = document.getElementById('eyebrowDot');
+  const elEyebrowText = document.getElementById('eyebrowText');
+  const elHeroSubtitle = document.getElementById('heroSubtitle');
+
+  const elHubLeft = document.getElementById('hubLeft');
+  const elHubRight = document.getElementById('hubRight');
+  const elHubBezel = document.getElementById('hubBezel');
+  const elHubLabel = document.getElementById('hubLabel');
+  const elHubResetBtn = document.getElementById('hubResetBtn');
+
+  const elFleetSegBar = document.getElementById('fleetSegBar');
+  const elFleetKpis = document.getElementById('fleetKpis');
+  const elC1OnlinePop = document.getElementById('c1OnlinePop');
+  const elPopOnlineCount = document.getElementById('popOnlineCount');
+  const elPopTotalCount = document.getElementById('popTotalCount');
+  const elPopOnlineSub = document.getElementById('popOnlineSub');
+
+  const elC2BgRows = document.getElementById('c2BgRows');
+  const elC2Bars = document.getElementById('c2Bars');
+
+  const elC3TailnetName = document.getElementById('c3TailnetName');
+  const elC3TrafficNum = document.getElementById('c3TrafficNum');
+  const elC3TrafficUnit = document.getElementById('c3TrafficUnit');
+  const elC3TrafficSplit = document.getElementById('c3TrafficSplit');
+  const elC3ExpiryRows = document.getElementById('c3ExpiryRows');
+  const elC3ExpiryPop = document.getElementById('c3ExpiryPop');
+  const elC3DaysNum = document.getElementById('c3DaysNum');
+  const elC3DaysUnit = document.getElementById('c3DaysUnit');
+  const elC3AlertDot = document.getElementById('c3AlertDot');
+  const elC3AlertText = document.getElementById('c3AlertText');
+
+  const elFleetSection = document.getElementById('fleetSection');
+  const elFleetCountChip = document.getElementById('fleetCountChip');
+  const elActiveFilterChip = document.getElementById('activeFilterChip');
+  const elActiveFilterLabel = document.getElementById('activeFilterLabel');
+  const elSearch = document.getElementById('searchInput');
+  const elCountAll = document.getElementById('countAll');
+  const elCountOnline = document.getElementById('countOnline');
+  const elCountOffline = document.getElementById('countOffline');
+  const elTabExpiring = document.getElementById('tabExpiring');
+  const elCountExpiring = document.getElementById('countExpiring');
+  const elStaleBanner = document.getElementById('staleBanner');
+  const elStaleErr = document.getElementById('staleErr');
+  const elFleetGrid = document.getElementById('fleetGrid');
+
+  /* ------------------------------------------------------------------------ */
+  /* Theme Switcher (Light default + Dark + Auto)                             */
+  /* ------------------------------------------------------------------------ */
+  const mediaDark = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+
+  function applyTheme(mode) {
+    if (mode !== 'light' && mode !== 'dark' && mode !== 'auto') mode = 'light';
+    const resolved = mode === 'auto'
+      ? (mediaDark && mediaDark.matches ? 'dark' : 'light')
+      : mode;
+    document.documentElement.dataset.themeMode = mode;
+    document.documentElement.dataset.theme = resolved;
+    try { localStorage.setItem('tailmon_theme', mode); } catch (_) {}
+    document.querySelectorAll('.theme-btn').forEach(btn => {
+      const active = btn.dataset.themeChoice === mode;
+      btn.classList.toggle('active', active);
+      btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
+  }
+
+  document.querySelectorAll('.theme-btn').forEach(btn => {
+    btn.addEventListener('click', () => applyTheme(btn.dataset.themeChoice));
+  });
+
+  if (mediaDark && mediaDark.addEventListener) {
+    mediaDark.addEventListener('change', () => {
+      if (document.documentElement.dataset.themeMode === 'auto') {
+        applyTheme('auto');
+      }
+    });
+  }
+  applyTheme(document.documentElement.dataset.themeMode || 'light');
+
+  /* ------------------------------------------------------------------------ */
+  /* Formatting & Data Helpers                                                */
+  /* ------------------------------------------------------------------------ */
+  function esc(str) {
+    if (str === null || str === undefined) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function deviceId(d) {
+    return (d.tailscale_ip || d.dns_name || d.hostname || '').toLowerCase();
+  }
+
+  function shortHost(d) {
+    return d.hostname || (d.dns_name || '').split('.')[0] || d.tailscale_ip || 'unknown';
+  }
+
+  function splitBytes(bytes) {
+    if (!bytes || bytes <= 0) return { num: '0', unit: 'B' };
+    const units = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB'];
+    let i = 0;
+    let val = Number(bytes);
+    while (val >= 1024 && i < units.length - 1) {
+      val /= 1024;
+      i++;
+    }
+    const num = i === 0 ? String(Math.round(val)) : (val >= 100 ? val.toFixed(0) : val.toFixed(1));
+    return { num, unit: units[i] };
+  }
+
+  function formatBytes(bytes) {
+    if (!bytes || bytes <= 0) return '0 B';
+    const units = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB'];
+    let i = 0;
+    let val = Number(bytes);
+    while (val >= 1024 && i < units.length - 1) {
+      val /= 1024;
+      i++;
+    }
+    return (val >= 10 || i === 0 ? val.toFixed(1) : val.toFixed(2)) + ' ' + units[i];
+  }
+
+  function formatUptime(sec) {
+    if (!sec || sec <= 0) return '—';
+    const d = Math.floor(sec / 86400);
+    const h = Math.floor((sec % 86400) / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    const parts = [];
+    if (d > 0) parts.push(d + 'd');
+    if (h > 0 || d > 0) parts.push(h + 'h');
+    parts.push(m + 'm');
+    return parts.join(' ');
+  }
+
+  function formatRelative(iso) {
+    if (!iso) return '—';
+    const ts = Date.parse(iso);
+    if (Number.isNaN(ts)) return iso;
+    const diff = Math.round((Date.now() - ts) / 1000);
+    if (Math.abs(diff) < 10) return 'just now';
+    if (diff > 0) {
+      if (diff < 60) return diff + 's ago';
+      if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+      if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+      return Math.floor(diff / 86400) + 'd ago';
+    }
+    return 'in ' + Math.abs(diff) + 's';
+  }
+
+  function formatLocalDate(iso, withTime) {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return iso;
+    if (withTime) {
+      return d.toLocaleString(undefined, {
+        month: 'short', day: 'numeric',
+        hour: '2-digit', minute: '2-digit', second: '2-digit'
+      });
+    }
+    return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+  }
+
+  function formatShortDate(iso) {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return iso;
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  }
+
+  function keyExpiryInfo(iso) {
+    if (!iso) return null;
+    const ts = Date.parse(iso);
+    if (Number.isNaN(ts)) return null;
+    const days = (ts - Date.now()) / 86400000;
+    return {
+      iso,
+      ts,
+      dateLabel: formatLocalDate(iso, false),
+      shortDate: formatShortDate(iso),
+      days,
+      expiringSoon: days < 14,
+      critical: days < 3
+    };
+  }
+
+  function seenRecently(iso) {
+    if (!iso) return false;
+    const ts = Date.parse(iso);
+    if (Number.isNaN(ts)) return false;
+    return (Date.now() - ts) <= 14 * 86400000;
+  }
+
+  function sortDevices(list) {
+    return list.slice().sort((a, b) => {
+      if (Boolean(a.online) !== Boolean(b.online)) return a.online ? -1 : 1;
+      if (a.online) {
+        if (Boolean(a.is_self) !== Boolean(b.is_self)) return a.is_self ? -1 : 1;
+        if (Boolean(a.active) !== Boolean(b.active)) return a.active ? -1 : 1;
+      } else {
+        const la = a.last_seen || '';
+        const lb = b.last_seen || '';
+        if (la !== lb) {
+          if (!la) return 1;
+          if (!lb) return -1;
+          return la > lb ? -1 : 1;
+        }
+      }
+      return (a.hostname || '').toLowerCase().localeCompare((b.hostname || '').toLowerCase());
+    });
+  }
+
+  function osGlyphSvg(os) {
+    const k = (os || '').toLowerCase();
+    if (k.includes('mac') || k.includes('darwin') || k.includes('ios')) {
+      return '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><line x1="2" y1="20" x2="22" y2="20"/></svg>';
+    }
+    if (k.includes('linux') || k.includes('ubuntu')) {
+      return '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="4" width="20" height="7" rx="2"/><rect x="2" y="13" width="20" height="7" rx="2"/><circle cx="6" cy="7.5" r="1" fill="currentColor" stroke="none"/><circle cx="6" cy="16.5" r="1" fill="currentColor" stroke="none"/></svg>';
+    }
+    if (k.includes('win')) {
+      return '<svg width="13" height="13" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><rect x="2" y="2" width="7" height="7" rx="1.2"/><rect x="11" y="2" width="7" height="7" rx="1.2" opacity="0.72"/><rect x="2" y="11" width="7" height="7" rx="1.2" opacity="0.72"/><rect x="11" y="11" width="7" height="7" rx="1.2" opacity="0.5"/></svg>';
+    }
+    if (k.includes('android')) {
+      return '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="2.5"/><line x1="11" y1="18" x2="13" y2="18"/></svg>';
+    }
+    return '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4"/></svg>';
+  }
+
+  /* ------------------------------------------------------------------------ */
+  /* SVG Connector Interactive Cross-Highlighting                             */
+  /* ------------------------------------------------------------------------ */
+  function syncSvgHighlights() {
+    const activeNode = hoveredHubIdx !== null ? hoveredHubIdx : selectedHubIdx;
+    for (let i = 0; i < 4; i++) {
+      const p = document.getElementById('path-node-' + i);
+      if (p) p.classList.toggle('active', activeNode === i);
+    }
+    const leftArm = document.getElementById('path-left-arm');
+    const rightArm = document.getElementById('path-right-arm');
+    const stem = document.getElementById('path-stem');
+    if (leftArm) leftArm.classList.toggle('active', activeNode === 0 || activeNode === 1);
+    if (rightArm) rightArm.classList.toggle('active', activeNode === 2 || activeNode === 3);
+    if (stem) stem.classList.toggle('active', activeNode !== null || hoveredCardIdx !== null);
+
+    for (let c = 0; c < 3; c++) {
+      const cp = document.getElementById('path-card-' + c);
+      if (cp) cp.classList.toggle('active', hoveredCardIdx === c);
+    }
+
+    elHubBezel.classList.toggle('pulsing', activeNode !== null);
+  }
+
+  /* ------------------------------------------------------------------------ */
+  /* Focus / Filter Linking from Hero to Fleet                                */
+  /* ------------------------------------------------------------------------ */
+  function syncFilterTabsUI() {
+    document.querySelectorAll('.filter-tab').forEach(btn => {
+      const f = btn.dataset.filter;
+      btn.classList.toggle('active', f === statusFilter);
+    });
+
+    let chipText = '';
+    if (spotlightDeviceId) {
+      const match = (snapshot && snapshot.devices || []).find(d => deviceId(d) === spotlightDeviceId);
+      chipText = 'Focused: ' + (match ? shortHost(match) : spotlightDeviceId);
+    } else if (statusFilter === 'active') {
+      chipText = 'Filter: Active tunnels';
+    } else if (statusFilter === 'expiring') {
+      chipText = 'Filter: Keys expiring <14d';
+    }
+
+    if (chipText) {
+      elActiveFilterLabel.textContent = chipText;
+      elActiveFilterChip.classList.add('visible');
+    } else {
+      elActiveFilterChip.classList.remove('visible');
+    }
+  }
+
+  function focusDeviceInFleet(targetId, scroll) {
+    spotlightDeviceId = targetId;
+    if (statusFilter !== 'all') {
+      const d = (snapshot && snapshot.devices || []).find(x => deviceId(x) === targetId);
+      if (d) {
+        if ((statusFilter === 'online' && !d.online) ||
+            (statusFilter === 'offline' && d.online) ||
+            (statusFilter === 'active' && !(d.online && d.active)) ||
+            (statusFilter === 'expiring' && !(keyExpiryInfo(d.key_expiry) && keyExpiryInfo(d.key_expiry).expiringSoon))) {
+          statusFilter = 'all';
+        }
+      }
+    }
+    if (searchQuery) {
+      searchQuery = '';
+      elSearch.value = '';
+    }
+    renderFleet();
+    syncFilterTabsUI();
+
+    if (scroll) {
+      const card = elFleetGrid.querySelector('[data-device-id="' + CSS.escape(targetId) + '"]');
+      if (card) {
+        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      } else {
+        elFleetSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }
+  }
+
+  function syncHubSelectionUI() {
+    document.querySelectorAll('.node-pill[data-hub-idx]').forEach(btn => {
+      const idx = Number(btn.dataset.hubIdx);
+      const id = btn.dataset.deviceId;
+      const isSelected = selectedHubIdx === idx || (spotlightDeviceId && spotlightDeviceId === id);
+      btn.classList.toggle('selected', Boolean(isSelected));
+      btn.setAttribute('aria-pressed', isSelected ? 'true' : 'false');
+    });
+  }
+
+  function applyQuickFilter(nextFilter, scrollToFleet) {
+    spotlightDeviceId = null;
+    selectedHubIdx = null;
+    statusFilter = nextFilter;
+    syncHubSelectionUI();
+    renderFleet();
+    syncFilterTabsUI();
+    syncSvgHighlights();
+    if (scrollToFleet) {
+      elFleetSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }
+
+  /* ------------------------------------------------------------------------ */
+  /* Render Hub-and-Spoke Flanking Nodes                                      */
+  /* ------------------------------------------------------------------------ */
+  function renderNodePill(d, idx) {
+    if (!d) {
+      return '<div class="node-pill empty-slot">Standby slot</div>';
+    }
+    const id = deviceId(d);
+    const isSelected = selectedHubIdx === idx || (spotlightDeviceId && spotlightDeviceId === id);
+    const subParts = [d.tailscale_ip || d.os || 'mesh', d.relay ? d.relay.toUpperCase() : ''].filter(Boolean).join(' · ');
+    return `
+      <button type="button" class="node-pill ${isSelected ? 'selected' : ''}" data-hub-idx="${idx}" data-device-id="${esc(id)}" aria-pressed="${isSelected ? 'true' : 'false'}" title="${esc(shortHost(d))} (${esc(d.tailscale_ip || '')})">
+        <span class="node-os-icon">${osGlyphSvg(d.os)}</span>
+        <span class="node-pill-text">
+          <span class="node-pill-name">${esc(shortHost(d))}</span>
+          <span class="node-pill-sub">${esc(subParts)}</span>
+        </span>
+        <span class="status-dot ${d.online ? 'online' : ''}" title="${d.online ? 'Online' : 'Offline'}"></span>
+      </button>
+    `;
+  }
+
+  function renderHub() {
+    const devices = sortDevices((snapshot && snapshot.devices) || []);
+    hubDevices = devices.slice(0, 4);
+
+    elHubLeft.innerHTML = renderNodePill(hubDevices[0], 0) + renderNodePill(hubDevices[1], 1);
+    elHubRight.innerHTML = renderNodePill(hubDevices[2], 2) + renderNodePill(hubDevices[3], 3);
+
+    // Gate animated beams on whether each hub slot has an online device
+    for (let i = 0; i < 4; i++) {
+      const beam = document.getElementById('beam-node-' + i);
+      if (!beam) continue;
+      const d = hubDevices[i];
+      beam.classList.toggle('beam-inactive', !d || !d.online);
+    }
+
+    const tailnetShort = snapshot && snapshot.tailnet
+      ? snapshot.tailnet.split('.')[0]
+      : 'tailmon';
+    elHubLabel.textContent = tailnetShort;
+    elHubLabel.title = (snapshot && snapshot.tailnet) || 'tailmon';
+  }
+
+  /* ------------------------------------------------------------------------ */
+  /* Render Pastel Card 1 (Lavender — Fleet Pulse)                            */
+  /* ------------------------------------------------------------------------ */
+  function renderCard1(devices) {
+    const total = devices.length;
+    const active = devices.filter(d => d.online && d.active).length;
+    const idle = devices.filter(d => d.online && !d.active).length;
+    const recent = devices.filter(d => !d.online && seenRecently(d.last_seen)).length;
+    const dormant = Math.max(0, total - active - idle - recent);
+    const online = active + idle;
+    const probed = devices.filter(d => d.spec_status === 'ok').length;
+
+    elPopOnlineCount.textContent = String(online);
+    elPopTotalCount.textContent = '/ ' + total;
+    elPopOnlineSub.textContent = `${active} active · ${probed} probed`;
+
+    const segments = [
+      { key: 'active', label: 'Active', value: active, color: SEG_COLORS.active, filter: 'active' },
+      { key: 'idle', label: 'Online', value: idle, color: SEG_COLORS.idle, filter: 'online' },
+      { key: 'recent', label: 'Recent', value: recent, color: SEG_COLORS.recent, filter: 'offline' },
+      { key: 'dormant', label: 'Dormant', value: dormant, color: SEG_COLORS.dormant, filter: 'offline' }
+    ];
+
+    const denom = Math.max(1, total);
+    elFleetSegBar.innerHTML = segments.map(seg => {
+      const pct = (seg.value / denom) * 100;
+      const dimmed = hoveredSegKey !== null && hoveredSegKey !== seg.key;
+      if (pct <= 0) return '';
+      return `<button type="button" class="seg-part ${dimmed ? 'dimmed' : ''}" data-seg-key="${seg.key}" data-seg-filter="${seg.filter}" style="width:${pct.toFixed(2)}%;background:${seg.color}" title="${seg.label}: ${seg.value} device${seg.value === 1 ? '' : 's'}"></button>`;
+    }).join('');
+
+    elFleetKpis.innerHTML = segments.map(seg => {
+      const dimmed = hoveredSegKey !== null && hoveredSegKey !== seg.key;
+      return `
+        <button type="button" class="c1-kpi-item ${dimmed ? 'dimmed' : ''}" data-seg-key="${seg.key}" data-seg-filter="${seg.filter}" title="Filter by ${seg.label}">
+          <div class="c1-kpi-num">${seg.value}</div>
+          <div class="c1-kpi-lbl">${seg.label}</div>
+        </button>
+      `;
+    }).join('');
+  }
+
+  /* ------------------------------------------------------------------------ */
+  /* Render Pastel Card 2 (Sky Blue — Resource Telemetry)                     */
+  /* ------------------------------------------------------------------------ */
+  function renderCard2(devices) {
+    const probed = devices.filter(d => d.spec_status === 'ok');
+
+    // Background mini-table of probed hosts
+    if (probed.length === 0) {
+      elC2BgRows.innerHTML = '<div class="c2-bg-row"><span class="c2-bg-host">No probed hosts</span><span class="c2-bg-stats">Waiting for SSH</span></div>';
+    } else {
+      elC2BgRows.innerHTML = probed.slice(0, 3).map(d => {
+        const load1 = (d.load_avg || '').split(/\s+/)[0] || '—';
+        const cores = d.cpu_cores ? d.cpu_cores + 'c' : '—';
+        const up = formatUptime(d.uptime_seconds);
+        return `
+          <div class="c2-bg-row">
+            <span class="c2-bg-host" title="${esc(shortHost(d))}">${esc(shortHost(d))}</span>
+            <span class="c2-bg-stats">${esc(cores)} · ${esc(load1)} · ${esc(up)}</span>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // Collect top utilization bars across RAM + primary Disk mounts
+    const bars = [];
+    for (const d of probed) {
+      const name = shortHost(d);
+      const id = deviceId(d);
+      if (d.mem_total > 0) {
+        const pct = Math.min(100, Math.max(0, ((d.mem_used || 0) / d.mem_total) * 100));
+        bars.push({ id, label: `${name} · RAM`, pct });
+      }
+      if (Array.isArray(d.disk) && d.disk.length > 0) {
+        const root = d.disk.find(m => m.target === '/') || d.disk[0];
+        if (root && root.total > 0) {
+          const pct = Math.min(100, Math.max(0, ((root.used || 0) / root.total) * 100));
+          bars.push({ id, label: `${name} · Disk ${root.target}`, pct });
+        }
+      }
+    }
+
+    bars.sort((a, b) => b.pct - a.pct);
+    const topBars = bars.slice(0, 4);
+    const palette = ['#72A4F5', '#B986EB', '#E68D6A', '#DFC05B'];
+
+    if (topBars.length === 0) {
+      elC2Bars.innerHTML = '<div class="c2-bar-label" style="padding:10px 0;opacity:0.7">No host metrics probed yet</div>';
+      return;
+    }
+
+    elC2Bars.innerHTML = topBars.map((b, i) => {
+      const barColor = b.pct >= 90 ? '#E86A42' : (b.pct >= 75 ? '#DFC05B' : palette[i % palette.length]);
+      const dimmed = hoveredBarIdx !== null && hoveredBarIdx !== i;
+      return `
+        <button type="button" class="c2-bar-item ${dimmed ? 'dimmed' : ''}" data-bar-idx="${i}" data-device-id="${esc(b.id)}" title="Focus ${esc(b.label)} (${b.pct.toFixed(0)}%)">
+          <div class="c2-bar-label">${esc(b.label)}</div>
+          <div class="c2-bar-row">
+            <div class="c2-track"><div class="c2-fill" style="width:${b.pct.toFixed(1)}%;background:${barColor}"></div></div>
+            <span class="c2-pct">${Math.round(b.pct)}%</span>
+          </div>
+        </button>
+      `;
+    }).join('');
+  }
+
+  /* ------------------------------------------------------------------------ */
+  /* Render Pastel Card 3 (Peach — Keys & Traffic)                            */
+  /* ------------------------------------------------------------------------ */
+  function renderCard3(devices) {
+    elC3TailnetName.textContent = snapshot && snapshot.tailnet
+      ? snapshot.tailnet
+      : 'Tailnet overview';
+
+    let totalTx = 0;
+    let totalRx = 0;
+    for (const d of devices) {
+      totalTx += Math.max(0, Number(d.tx_bytes) || 0);
+      totalRx += Math.max(0, Number(d.rx_bytes) || 0);
+    }
+    const split = splitBytes(totalTx + totalRx);
+    elC3TrafficNum.textContent = split.num;
+    elC3TrafficUnit.textContent = split.unit;
+    elC3TrafficSplit.textContent = `TX ${formatBytes(totalTx)} · RX ${formatBytes(totalRx)}`;
+
+    const withExpiry = devices
+      .map(d => ({ d, exp: keyExpiryInfo(d.key_expiry) }))
+      .filter(item => item.exp !== null)
+      .sort((a, b) => a.exp.days - b.exp.days);
+
+    if (withExpiry.length > 0) {
+      const soonest = withExpiry[0];
+      const daysCeil = Math.max(0, Math.ceil(soonest.exp.days));
+      elC3DaysNum.textContent = String(daysCeil);
+      elC3DaysUnit.textContent = daysCeil === 1 ? 'day' : 'days';
+      elC3ExpiryPop.dataset.deviceId = deviceId(soonest.d);
+      elC3ExpiryPop.dataset.isExpiring = soonest.exp.expiringSoon ? '1' : '0';
+
+      if (soonest.exp.expiringSoon) {
+        elC3AlertDot.className = 'alert-badge-dot';
+        elC3AlertDot.textContent = '!';
+        elC3AlertText.textContent = `${shortHost(soonest.d)} · ${soonest.exp.shortDate}`;
+      } else {
+        elC3AlertDot.className = 'alert-badge-dot ok';
+        elC3AlertDot.textContent = '✓';
+        elC3AlertText.textContent = `Healthy · ${shortHost(soonest.d)}`;
+      }
+    } else {
+      elC3DaysNum.textContent = 'OK';
+      elC3DaysUnit.textContent = '';
+      elC3AlertDot.className = 'alert-badge-dot ok';
+      elC3AlertDot.textContent = '✓';
+      elC3AlertText.textContent = 'No expiring keys';
+      elC3ExpiryPop.dataset.deviceId = '';
+      elC3ExpiryPop.dataset.isExpiring = '0';
+    }
+
+    const previewExpiries = withExpiry.slice(0, 2);
+    if (previewExpiries.length === 0) {
+      elC3ExpiryRows.innerHTML = '<div class="c3-table-row"><span class="c3-table-host">No key dates</span><span>—</span><span>—</span></div>';
+    } else {
+      elC3ExpiryRows.innerHTML = previewExpiries.map(({ d, exp }) => `
+        <div class="c3-table-row">
+          <span class="c3-table-host" title="${esc(shortHost(d))}">${esc(shortHost(d))}</span>
+          <span style="text-transform:uppercase">${esc(d.relay || '—')}</span>
+          <span style="font-variant-numeric:tabular-nums">${esc(exp.shortDate)}</span>
+        </div>
+      `).join('');
+    }
+  }
+
+  /* ------------------------------------------------------------------------ */
+  /* Render Device Fleet Grid                                                 */
+  /* ------------------------------------------------------------------------ */
+  function meterClass(pct) {
+    if (pct >= 90) return 'danger';
+    if (pct >= 75) return 'warn';
+    return '';
+  }
+
+  function renderMeter(label, used, total) {
+    const pct = total > 0 ? Math.min(100, Math.max(0, (used / total) * 100)) : 0;
+    return `
+      <div class="meter-block">
+        <div class="meter-top">
+          <span class="meter-lbl" title="${esc(label)}">${esc(label)}</span>
+          <span class="meter-val">${esc(formatBytes(used))} / ${esc(formatBytes(total))} (${pct.toFixed(0)}%)</span>
+        </div>
+        <div class="meter-track">
+          <div class="meter-fill ${meterClass(pct)}" style="width:${pct.toFixed(1)}%"></div>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderDeviceCard(d) {
+    const id = deviceId(d);
+    const osBadge = d.os_version || d.os || 'unknown';
+    const badges = [];
+    if (d.is_self) badges.push('<span class="tag tag-self">THIS NODE</span>');
+    if (d.active) badges.push('<span class="tag tag-active">ACTIVE</span>');
+    if (d.spec_note) badges.push(`<span class="tag tag-note">${esc(d.spec_note)}</span>`);
+    badges.push(`<span class="tag">${esc(osBadge)}</span>`);
+
+    const shortDns = (d.dns_name || '').split('.')[0] || '';
+    const exp = keyExpiryInfo(d.key_expiry);
+
+    let expiryHtml = '';
+    if (exp && exp.expiringSoon) {
+      const cls = exp.critical ? 'danger' : 'warn';
+      const msg = exp.days <= 0
+        ? 'Tailscale key expired'
+        : `Key expires in ${Math.max(1, Math.ceil(exp.days))}d`;
+      expiryHtml = `
+        <div class="dev-expiry-alert ${cls}">
+          <span class="dev-expiry-left">
+            <span class="alert-badge-dot" aria-hidden="true">!</span>
+            <span>${esc(msg)}</span>
+          </span>
+          <span style="font-family:var(--font-mono);font-size:11px">${esc(exp.dateLabel)}</span>
+        </div>
+      `;
+    }
+
+    let specsHtml = '';
+    if (d.spec_status === 'ok') {
+      const cpuDesc = [d.cpu_model || '', d.cpu_cores ? `${d.cpu_cores} cores` : ''].filter(Boolean).join(' · ') || '—';
+      const meters = [];
+      if (d.mem_total > 0) meters.push(renderMeter('RAM', d.mem_used || 0, d.mem_total));
+      if (Array.isArray(d.disk)) {
+        for (const m of d.disk) {
+          meters.push(renderMeter(`Disk ${m.target}`, m.used || 0, m.total || 0));
+        }
+      }
+      specsHtml = `
+        <div class="spec-tray">
+          <div class="kv-row">
+            <span class="kv-k">CPU</span>
+            <span class="kv-v" title="${esc(cpuDesc)}">${esc(cpuDesc)}</span>
+          </div>
+          ${d.load_avg ? `<div class="kv-row"><span class="kv-k">Load avg</span><span class="kv-v">${esc(d.load_avg)}</span></div>` : ''}
+          ${d.uptime_seconds ? `<div class="kv-row"><span class="kv-k">Uptime</span><span class="kv-v">${esc(formatUptime(d.uptime_seconds))}</span></div>` : ''}
+          ${meters.join('')}
+        </div>
+      `;
+    } else if (d.spec_status === 'unavailable') {
+      specsHtml = '<div class="spec-unavail">Specs unavailable (SSH timed out or refused)</div>';
+    } else {
+      specsHtml = '<div class="spec-tray"><div class="spec-na">Host telemetry: n/a</div></div>';
+    }
+
+    const lastSeenText = d.online
+      ? 'Online'
+      : (d.last_seen ? `Seen ${formatRelative(d.last_seen)}` : 'Offline');
+    const trafficText = `TX ${formatBytes(d.tx_bytes)} · RX ${formatBytes(d.rx_bytes)}`;
+    const expiryText = exp ? `Key ${exp.dateLabel}` : 'No key expiry';
+    const isSpotlight = spotlightDeviceId && spotlightDeviceId === id;
+
+    return `
+      <article class="dev-card ${d.online ? 'online' : 'offline'} ${isSpotlight ? 'spotlight' : ''}" data-device-id="${esc(id)}">
+        <div class="dev-head">
+          <div class="dev-host-line">
+            <div class="dev-host-wrap">
+              <span class="status-dot ${d.online ? 'online' : ''}" title="${d.online ? 'Online' : 'Offline'}"></span>
+              <span class="node-os-icon" style="width:22px;height:22px;border-radius:6px">${osGlyphSvg(d.os)}</span>
+              <div class="dev-hostname" title="${esc(shortHost(d))}">${esc(shortHost(d))}</div>
+            </div>
+          </div>
+          <div class="dev-badges">${badges.join('')}</div>
+        </div>
+
+        <div class="dev-net">
+          ${d.tailscale_ip ? `<button class="ip-copy-btn" type="button" data-copy="${esc(d.tailscale_ip)}" title="Copy Tailscale IP">${esc(d.tailscale_ip)}</button>` : ''}
+          ${shortDns ? `<span class="dns-short" title="${esc(d.dns_name)}">${esc(shortDns)}</span>` : ''}
+          ${d.relay ? `<span class="relay-pill" title="DERP relay">${esc(d.relay)}</span>` : ''}
+        </div>
+
+        ${expiryHtml}
+        ${specsHtml}
+
+        <div class="dev-foot">
+          <span title="${esc(d.last_seen || '')}">${esc(lastSeenText)}</span>
+          <span>${esc(trafficText)}</span>
+          <span>${esc(expiryText)}</span>
+        </div>
+      </article>
+    `;
+  }
+
+  function renderFleet() {
+    if (!snapshot) return;
+    const devices = sortDevices(snapshot.devices || []);
+    const q = searchQuery.trim().toLowerCase();
+
+    const filtered = devices.filter(d => {
+      if (statusFilter === 'online' && !d.online) return false;
+      if (statusFilter === 'offline' && d.online) return false;
+      if (statusFilter === 'active' && !(d.online && d.active)) return false;
+      if (statusFilter === 'expiring') {
+        const exp = keyExpiryInfo(d.key_expiry);
+        if (!exp || !exp.expiringSoon) return false;
+      }
+      if (!q) return true;
+      const hay = [
+        d.hostname, d.dns_name, d.tailscale_ip,
+        d.os, d.os_version, d.relay, d.cpu_model
+      ].join(' ').toLowerCase();
+      return hay.includes(q);
+    });
+
+    elFleetCountChip.textContent = filtered.length === devices.length
+      ? `${devices.length} devices`
+      : `${filtered.length} of ${devices.length}`;
+
+    if (filtered.length === 0) {
+      elFleetGrid.innerHTML = '<div class="empty-state">No tailnet devices match the current filter.</div>';
+      return;
+    }
+
+    elFleetGrid.innerHTML = filtered.map(renderDeviceCard).join('');
+  }
+
+  /* ------------------------------------------------------------------------ */
+  /* Master Render                                                            */
+  /* ------------------------------------------------------------------------ */
+  function render() {
+    if (!snapshot) return;
+
+    const devices = sortDevices(snapshot.devices || []);
+    const onlineCount = devices.filter(d => d.online).length;
+    const offlineCount = devices.length - onlineCount;
+    const expiringCount = devices.filter(d => {
+      const exp = keyExpiryInfo(d.key_expiry);
+      return exp && exp.expiringSoon;
+    }).length;
+
+    // Utility Bar (concise single-line on desktop, full timestamp in tooltip)
+    if (snapshot.collected_at) {
+      elCollectedMeta.textContent = `Updated ${formatRelative(snapshot.collected_at)}`;
+      elCollectedMeta.title = `Last collected: ${formatLocalDate(snapshot.collected_at, true)}`;
+    } else {
+      elCollectedMeta.textContent = 'Waiting for first poll…';
+      elCollectedMeta.title = '';
+    }
+
+    if (snapshot.self_hostname) {
+      elCollectorMeta.textContent = `via ${snapshot.self_hostname}`;
+      elCollectorMeta.title = `Collector host: ${snapshot.self_hostname}`;
+      elCollectorMeta.style.display = 'inline';
+    } else {
+      elCollectorMeta.style.display = 'none';
+    }
+
+    elLiveDot.classList.toggle('stale', Boolean(snapshot.stale));
+    elLogoutForm.style.display = snapshot.auth_enabled ? 'block' : 'none';
+
+    // Eyebrow & Subtitle
+    if (snapshot.stale) {
+      elEyebrowDot.className = 'eyebrow-dot-inner warn';
+      elEyebrowText.textContent = 'STALE SNAPSHOT · CACHED';
+    } else if (expiringCount > 0) {
+      elEyebrowDot.className = 'eyebrow-dot-inner warn';
+      elEyebrowText.textContent = `${onlineCount}/${devices.length} ONLINE · ${expiringCount} KEY EXPIRING`;
+    } else {
+      elEyebrowDot.className = 'eyebrow-dot-inner';
+      elEyebrowText.textContent = `TAILNET LIVE · ${onlineCount}/${devices.length} ONLINE`;
+    }
+
+    const tailnetDisplay = snapshot.tailnet ? `<strong>${esc(snapshot.tailnet)}</strong>` : 'your tailnet';
+    elHeroSubtitle.innerHTML = `Monitoring <strong>${devices.length}</strong> nodes on ${tailnetDisplay} with 60s WireGuard status polling and parallel SSH resource probes.`;
+
+    // Stale Banner
+    if (snapshot.stale) {
+      elStaleBanner.classList.add('visible');
+      elStaleErr.textContent = snapshot.error || '';
+    } else {
+      elStaleBanner.classList.remove('visible');
+      elStaleErr.textContent = '';
+    }
+
+    // Filter Counts
+    elCountAll.textContent = String(devices.length);
+    elCountOnline.textContent = String(onlineCount);
+    elCountOffline.textContent = String(offlineCount);
+    elCountExpiring.textContent = String(expiringCount);
+    elTabExpiring.style.display = expiringCount > 0 ? 'inline-flex' : 'none';
+
+    renderHub();
+    renderCard1(devices);
+    renderCard2(devices);
+    renderCard3(devices);
+    renderFleet();
+    syncFilterTabsUI();
+    syncSvgHighlights();
+  }
+
+  /* ------------------------------------------------------------------------ */
+  /* Data Fetching                                                            */
+  /* ------------------------------------------------------------------------ */
+  async function fetchDevices(isManualRefresh) {
+    if (isFetching) return;
+    isFetching = true;
+    elRefreshBtn.disabled = true;
+    elRefreshBtn.classList.add('btn-icon-spin');
+    elRefreshLabel.textContent = isManualRefresh ? 'Refreshing…' : 'Syncing…';
+
+    try {
+      const resp = isManualRefresh
+        ? await fetch('/api/refresh', { method: 'POST', credentials: 'same-origin' })
+        : await fetch('/api/devices.json', { credentials: 'same-origin', cache: 'no-store' });
+
+      if (resp.status === 401) {
+        window.location.reload();
+        return;
+      }
+      if (!resp.ok) {
+        throw new Error('HTTP ' + resp.status);
+      }
+      snapshot = await resp.json();
+      secondsLeft = REFRESH_SECONDS;
+      render();
+    } catch (err) {
+      if (snapshot) {
+        snapshot.stale = true;
+        snapshot.error = err.message || 'fetch failed';
+        render();
+      } else {
+        elFleetGrid.innerHTML = `<div class="empty-state">Failed to load tailnet snapshot: ${esc(err.message)}</div>`;
+      }
+    } finally {
+      isFetching = false;
+      elRefreshBtn.disabled = false;
+      elRefreshBtn.classList.remove('btn-icon-spin');
+      elRefreshLabel.textContent = 'Refresh';
+    }
+  }
+
+  /* ------------------------------------------------------------------------ */
+  /* Event Delegation & Interactions                                          */
+  /* ------------------------------------------------------------------------ */
+  function bindHubSide(container) {
+    container.addEventListener('mouseover', e => {
+      const btn = e.target.closest('.node-pill[data-hub-idx]');
+      if (!btn) return;
+      hoveredHubIdx = Number(btn.dataset.hubIdx);
+      syncSvgHighlights();
+    });
+    container.addEventListener('mouseout', e => {
+      const btn = e.target.closest('.node-pill[data-hub-idx]');
+      if (!btn) return;
+      if (!btn.contains(e.relatedTarget)) {
+        hoveredHubIdx = null;
+        syncSvgHighlights();
+      }
+    });
+    container.addEventListener('click', e => {
+      const btn = e.target.closest('.node-pill[data-hub-idx]');
+      if (!btn) return;
+      const idx = Number(btn.dataset.hubIdx);
+      const id = btn.dataset.deviceId;
+      if (selectedHubIdx === idx && spotlightDeviceId === id) {
+        selectedHubIdx = null;
+        spotlightDeviceId = null;
+        syncHubSelectionUI();
+        renderFleet();
+        syncFilterTabsUI();
+        syncSvgHighlights();
+      } else {
+        selectedHubIdx = idx;
+        if (id) focusDeviceInFleet(id, true);
+        syncHubSelectionUI();
+        syncSvgHighlights();
+      }
+    });
+  }
+  bindHubSide(elHubLeft);
+  bindHubSide(elHubRight);
+
+  elHubResetBtn.addEventListener('click', () => applyQuickFilter('all', false));
+
+  document.querySelectorAll('.pastel-card[data-pastel-card]').forEach(card => {
+    const idx = Number(card.dataset.pastelCard);
+    card.addEventListener('mouseenter', () => {
+      hoveredCardIdx = idx;
+      syncSvgHighlights();
+    });
+    card.addEventListener('mouseleave', () => {
+      hoveredCardIdx = null;
+      syncSvgHighlights();
+    });
+  });
+
+  // Card 1: Hover & click segments / KPIs
+  function bindCard1HoverClick(container) {
+    container.addEventListener('mouseover', e => {
+      const el = e.target.closest('[data-seg-key]');
+      if (!el) return;
+      if (hoveredSegKey !== el.dataset.segKey) {
+        hoveredSegKey = el.dataset.segKey;
+        if (snapshot) renderCard1(sortDevices(snapshot.devices || []));
+      }
+    });
+    container.addEventListener('mouseleave', () => {
+      if (hoveredSegKey !== null) {
+        hoveredSegKey = null;
+        if (snapshot) renderCard1(sortDevices(snapshot.devices || []));
+      }
+    });
+    container.addEventListener('click', e => {
+      const el = e.target.closest('[data-seg-filter]');
+      if (!el) return;
+      applyQuickFilter(el.dataset.segFilter, true);
+    });
+  }
+  bindCard1HoverClick(elFleetSegBar);
+  bindCard1HoverClick(elFleetKpis);
+
+  elC1OnlinePop.addEventListener('click', () => applyQuickFilter('online', true));
+
+  // Card 2: Hover & click resource utilization bars
+  elC2Bars.addEventListener('mouseover', e => {
+    const btn = e.target.closest('[data-bar-idx]');
+    if (!btn) return;
+    const idx = Number(btn.dataset.barIdx);
+    if (hoveredBarIdx !== idx) {
+      hoveredBarIdx = idx;
+      if (snapshot) renderCard2(sortDevices(snapshot.devices || []));
+    }
+  });
+  elC2Bars.addEventListener('mouseleave', () => {
+    if (hoveredBarIdx !== null) {
+      hoveredBarIdx = null;
+      if (snapshot) renderCard2(sortDevices(snapshot.devices || []));
+    }
+  });
+  elC2Bars.addEventListener('click', e => {
+    const btn = e.target.closest('[data-device-id]');
+    if (!btn) return;
+    focusDeviceInFleet(btn.dataset.deviceId, true);
+  });
+
+  // Card 3: Click soonest key expiry popover
+  elC3ExpiryPop.addEventListener('click', () => {
+    if (elC3ExpiryPop.dataset.isExpiring === '1') {
+      applyQuickFilter('expiring', true);
+    } else if (elC3ExpiryPop.dataset.deviceId) {
+      focusDeviceInFleet(elC3ExpiryPop.dataset.deviceId, true);
+    }
+  });
+
+  // Fleet Controls
+  document.querySelectorAll('.filter-tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      spotlightDeviceId = null;
+      selectedHubIdx = null;
+      statusFilter = btn.dataset.filter || 'all';
+      syncHubSelectionUI();
+      renderFleet();
+      syncFilterTabsUI();
+      syncSvgHighlights();
+    });
+  });
+
+  elActiveFilterChip.addEventListener('click', () => applyQuickFilter('all', false));
+
+  elSearch.addEventListener('input', () => {
+    searchQuery = elSearch.value;
+    spotlightDeviceId = null;
+    renderFleet();
+    syncFilterTabsUI();
+  });
+
+  document.addEventListener('keydown', e => {
+    if (e.key === '/' && document.activeElement !== elSearch && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      e.preventDefault();
+      elSearch.focus();
+    } else if (e.key === 'Escape') {
+      if (document.activeElement === elSearch) {
+        elSearch.blur();
+      } else if (spotlightDeviceId || selectedHubIdx !== null) {
+        applyQuickFilter('all', false);
+      }
+    }
+  });
+
+  elRefreshBtn.addEventListener('click', () => fetchDevices(true));
+
+  // Copy IP button
+  elFleetGrid.addEventListener('click', async e => {
+    const btn = e.target.closest('.ip-copy-btn');
+    if (!btn) return;
+    const text = btn.dataset.copy;
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      const orig = btn.textContent;
+      btn.textContent = 'Copied!';
+      btn.classList.add('copied');
+      setTimeout(() => {
+        btn.textContent = orig;
+        btn.classList.remove('copied');
+      }, 1100);
+    } catch (_) {}
+  });
+
+  // Auto-refresh countdown
+  setInterval(() => {
+    secondsLeft -= 1;
+    if (secondsLeft <= 0) {
+      secondsLeft = REFRESH_SECONDS;
+      fetchDevices(false);
+    }
+    elCountdownText.textContent = secondsLeft + 's';
+  }, 1000);
+
+  fetchDevices(false);
+})();
+</script>
+</body>
+</html>
