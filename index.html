@@ -1975,6 +1975,30 @@
     box-shadow: 0 2px 6px rgba(15, 23, 42, 0.10);
   }
 
+  .mask-ip-btn {
+    appearance: none;
+    border: 1px solid var(--hairline-strong);
+    background: var(--surface-pill);
+    color: var(--text-secondary);
+    height: 30px;
+    padding: 0 12px;
+    border-radius: 8px;
+    font-family: var(--font-sans);
+    font-size: 11.5px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 150ms var(--ease-out), color 150ms var(--ease-out), border-color 150ms var(--ease-out), transform 140ms var(--ease-out);
+  }
+  .mask-ip-btn:hover { color: var(--text-primary); border-color: var(--accent-border); }
+  .mask-ip-btn:active { transform: scale(0.97); }
+  .mask-ip-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .mask-ip-btn.active {
+    background: var(--surface);
+    color: var(--text-primary);
+    border-color: var(--accent-border);
+    box-shadow: 0 2px 6px rgba(15, 23, 42, 0.10);
+  }
+
   /* Device Grid Cards */
   .fleet-grid-cards {
     display: grid;
@@ -2030,11 +2054,20 @@
     gap: 8px;
   }
 
+  .dev-head-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    min-width: 0;
+  }
+
   .dev-host-wrap {
     display: flex;
     align-items: center;
     gap: 8px;
     min-width: 0;
+    flex: 1;
   }
 
   .status-dot {
@@ -2408,6 +2441,7 @@
     .filter-tab:active,
     .view-btn:active,
     .ip-copy-btn:active,
+    .term-launch-btn:active,
     .active-filter-chip:active,
     .dev-card:hover {
       transform: none !important;
@@ -2418,7 +2452,8 @@
   /* IN-APP TERMINAL DOCK & DEVICE LAUNCHER                                   */
   /* ======================================================================== */
   .term-launch-btn {
-    margin-left: auto;
+    flex-shrink: 0;
+    white-space: nowrap;
     display: inline-flex;
     align-items: center;
     gap: 5px;
@@ -2438,6 +2473,7 @@
     background: var(--surface-inset);
   }
   .term-launch-btn:active { transform: scale(0.97); }
+  .term-launch-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .term-launch-btn svg { flex-shrink: 0; }
 
   body.term-dock-open .page-wrap {
@@ -3060,6 +3096,7 @@
                   <button class="view-btn active" type="button" data-view="grid" aria-pressed="true">Cards</button>
                   <button class="view-btn" type="button" data-view="table" aria-pressed="false">Table</button>
                 </div>
+                <button id="maskIpBtn" class="mask-ip-btn" type="button" aria-pressed="false" title="Mask Tailscale IPs on cards and table">Mask IP</button>
               </div>
             </div>
 
@@ -3158,6 +3195,32 @@
     const savedChart = localStorage.getItem('tailmon_chart_mode');
     if (savedChart === 'timeline' || savedChart === 'nodes') chartMode = savedChart;
   } catch (_) {}
+
+  let maskIpEnabled = false;
+  try { maskIpEnabled = localStorage.getItem('tailmon_mask_ip') === '1'; } catch (_) {}
+  function maskIpText(ip) {
+    if (!maskIpEnabled || !ip) return ip || '';
+    const v4 = String(ip).split('.');
+    if (v4.length === 4 && v4.every(p => /^\d+$/.test(p))) return v4[0] + '.' + v4[1] + '.•••.•••';
+    const v6 = String(ip).split(':');
+    if (v6.length > 1) return v6[0] + ':•••';
+    return '•••';
+  }
+  const elMaskIpBtn = document.getElementById('maskIpBtn');
+  function syncMaskIpBtn() {
+    if (!elMaskIpBtn) return;
+    elMaskIpBtn.classList.toggle('active', maskIpEnabled);
+    elMaskIpBtn.setAttribute('aria-pressed', maskIpEnabled ? 'true' : 'false');
+  }
+  if (elMaskIpBtn) {
+    elMaskIpBtn.addEventListener('click', () => {
+      maskIpEnabled = !maskIpEnabled;
+      try { localStorage.setItem('tailmon_mask_ip', maskIpEnabled ? '1' : '0'); } catch (_) {}
+      syncMaskIpBtn();
+      renderFleet();
+    });
+  }
+  syncMaskIpBtn();
 
   let searchQuery = '';
   let spotlightDeviceId = null;
@@ -4285,19 +4348,21 @@
     return `
       <article class="dev-card ${d.online ? 'online' : 'offline'} ${isSpotlight ? 'spotlight' : ''}" data-device-id="${esc(id)}">
         <div class="dev-head">
-          <div class="dev-host-wrap">
-            <span class="status-dot ${d.online ? 'online' : ''}" title="${d.online ? 'Online' : 'Offline'}"></span>
-            <span class="node-os-icon">${osGlyphSvg(d.os)}</span>
-            <div class="dev-hostname" title="${esc(shortHost(d))}">${esc(shortHost(d))}</div>
+          <div class="dev-head-top">
+            <div class="dev-host-wrap">
+              <span class="status-dot ${d.online ? 'online' : ''}" title="${d.online ? 'Online' : 'Offline'}"></span>
+              <span class="node-os-icon">${osGlyphSvg(d.os)}</span>
+              <div class="dev-hostname" title="${esc(shortHost(d))}">${esc(shortHost(d))}</div>
+            </div>
+            ${(snapshot && snapshot.terminal_enabled && d.online && d.terminal_available) ? `<button class="term-launch-btn" type="button" data-term-device="${esc(d.terminal_target_id || id)}" data-term-label="${esc(shortHost(d))}" title="Open SSH terminal"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg><span>Terminal</span></button>` : ''}
           </div>
           <div class="dev-badges">${badges.join('')}</div>
         </div>
 
         <div class="dev-net">
-          ${d.tailscale_ip ? `<button class="ip-copy-btn" type="button" data-copy="${esc(d.tailscale_ip)}" title="Copy Tailscale IP">${esc(d.tailscale_ip)}</button>` : ''}
+          ${d.tailscale_ip ? `<button class="ip-copy-btn" type="button" data-copy="${esc(d.tailscale_ip)}" title="Copy Tailscale IP">${esc(maskIpText(d.tailscale_ip))}</button>` : ''}
           ${shortDns ? `<span class="dns-short" title="${esc(d.dns_name)}">${esc(shortDns)}</span>` : ''}
           ${d.relay ? `<span class="relay-pill" title="DERP relay">${esc(d.relay)}</span>` : ''}
-          ${(snapshot && snapshot.terminal_enabled && d.online && d.terminal_available) ? `<button class="term-launch-btn" type="button" data-term-device="${esc(d.terminal_target_id || id)}" data-term-label="${esc(shortHost(d))}" title="Open SSH terminal"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg><span>Terminal</span></button>` : ''}
         </div>
 
         ${expiryHtml}
@@ -4388,7 +4453,7 @@
         </td>
         <td>
           <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-            ${d.tailscale_ip ? `<button class="ip-copy-btn" type="button" data-copy="${esc(d.tailscale_ip)}" title="Copy Tailscale IP">${esc(d.tailscale_ip)}</button>` : '<span class="tbl-sub">—</span>'}
+            ${d.tailscale_ip ? `<button class="ip-copy-btn" type="button" data-copy="${esc(d.tailscale_ip)}" title="Copy Tailscale IP">${esc(maskIpText(d.tailscale_ip))}</button>` : '<span class="tbl-sub">—</span>'}
             ${d.relay ? `<span class="relay-pill" title="DERP relay">${esc(d.relay)}</span>` : ''}
           </div>
           <div class="tbl-sub" style="margin-top:4px">${esc(lastSeenText)}</div>
