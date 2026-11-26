@@ -33,11 +33,21 @@ GOOS=linux GOARCH=amd64 go build -o tailmon .
 | `TAILMON_SSH_MAC` | `mac-tailscale` | SSH target/alias for Mac node |
 | `TAILMON_SSH_TOKYO` | `ssh -p 25528 root@jp-tyo01.tryaltare.ai` | SSH target/command for Tokyo container node |
 | `TAILMON_SSH_VPS` | _(empty)_ | Optional SSH target for VPS if collector runs off-VPS |
+| `TAILMON_SSH_TARGETS` | _(empty)_ | Comma-separated `host=ssh_target` allowlist map for additional nodes (e.g. `db-vps=root@100.64.0.5,worker=ssh -p 2222 ubuntu@worker-ts`) |
+| `TAILMON_TERMINAL_PIN` | _(empty)_ | Optional secondary PIN required before opening any in-app terminal session |
+| `TAILMON_TERM_IDLE_TIMEOUT` | `30m` | Idle timeout before closing an inactive terminal WebSocket/PTY session |
+| `TAILMON_TERM_MAX_SESSIONS` | `6` | Maximum concurrent active terminal sessions |
 | `TAILMON_INTERVAL` | `60s` | Background poll interval |
 | `TAILMON_SSH_TIMEOUT` | `5s` | Max timeout per node for spec probes |
 | `TAILMON_TAILSCALE_BIN` | _(auto-detected)_ | Explicit path to `tailscale` CLI |
 
 > **Never hardcode `TAILMON_PASSWORD` or commit `.env` files containing secrets.**
+
+### In-App SSH Terminal Security
+- The in-app SSH terminal is **hard-disabled** unless `TAILMON_PASSWORD` is non-empty.
+- Only pre-configured allowlisted fleet nodes (`IsSelf` local shell, `TAILMON_SSH_*`, and `TAILMON_SSH_TARGETS`) can be accessed—clients cannot supply arbitrary hosts or SSH flags.
+- Set `TAILMON_TERMINAL_PIN` for an extra unlock prompt before opening shell tabs.
+- WebSocket sessions are ephemeral (1:1 with the browser tab); use `tmux` on target hosts if you want sessions to persist across browser refreshes.
 
 ---
 
@@ -107,6 +117,19 @@ server {
     listen 80;
     listen [::]:80;
     server_name devices.adityahimaone.space;
+
+    location /api/terminal/ws {
+        proxy_pass http://127.0.0.1:8791;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+    }
 
     location / {
         proxy_pass http://127.0.0.1:8791;

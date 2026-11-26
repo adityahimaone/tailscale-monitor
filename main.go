@@ -6,13 +6,14 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"crypto/subtle"
-	_ "embed"
+	"embed"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"html"
 	"io"
+	"io/fs"
 	"log"
 	"net/http"
 	"os"
@@ -31,26 +32,36 @@ import (
 //go:embed index.html
 var indexHTML []byte
 
+//go:embed assets/xterm/*
+var xtermAssets embed.FS
+
 const (
-	defaultAddr        = "127.0.0.1:8791"
-	defaultInterval    = 60 * time.Second
-	defaultSSHTimeout  = 5 * time.Second
-	defaultSSHMac      = "mac-tailscale"
-	defaultSSHTokyo    = "ssh -p 25528 root@jp-tyo01.tryaltare.ai"
-	defaultSSHInstabox = "instabox-vps-1-ts"
-	authCookieName     = "tailmon_auth"
+	defaultAddr            = "127.0.0.1:8791"
+	defaultInterval        = 60 * time.Second
+	defaultSSHTimeout      = 5 * time.Second
+	defaultSSHMac          = "mac-tailscale"
+	defaultSSHTokyo        = "ssh -p 25528 root@jp-tyo01.tryaltare.ai"
+	defaultSSHInstabox     = "instabox-vps-1-ts"
+	defaultTermIdleTimeout = 30 * time.Minute
+	defaultTermMaxSessions = 6
+	authCookieName         = "tailmon_auth"
+	termPinCookieName      = "tailmon_term_auth"
 )
 
 type Config struct {
-	Addr         string
-	Password     string
-	Interval     time.Duration
-	SSHTimeout   time.Duration
-	SSHMac       string
-	SSHTokyo     string
-	SSHVPS       string
-	SSHInstabox  string
-	TailscaleBin string
+	Addr            string
+	Password        string
+	TerminalPin     string
+	Interval        time.Duration
+	SSHTimeout      time.Duration
+	TermIdleTimeout time.Duration
+	TermMaxSessions int
+	SSHMac          string
+	SSHTokyo        string
+	SSHVPS          string
+	SSHInstabox     string
+	SSHTargets      map[string]string
+	TailscaleBin    string
 }
 
 type DiskMount struct {
@@ -80,18 +91,22 @@ type Device struct {
 	LoadAvg       string      `json:"load_avg,omitempty"`
 	MemTotal      uint64      `json:"mem_total,omitempty"`
 	MemUsed       uint64      `json:"mem_used,omitempty"`
-	Disk          []DiskMount `json:"disk,omitempty"`
-	UptimeSeconds int64       `json:"uptime_seconds,omitempty"`
+	Disk              []DiskMount `json:"disk,omitempty"`
+	UptimeSeconds     int64       `json:"uptime_seconds,omitempty"`
+	TerminalAvailable bool        `json:"terminal_available"`
+	TerminalTargetID  string      `json:"terminal_target_id,omitempty"`
 }
 
 type Snapshot struct {
-	CollectedAt  string   `json:"collected_at"`
-	Stale        bool     `json:"stale"`
-	Error        string   `json:"error,omitempty"`
-	Tailnet      string   `json:"tailnet,omitempty"`
-	SelfHostname string   `json:"self_hostname,omitempty"`
-	AuthEnabled  bool     `json:"auth_enabled"`
-	Devices      []Device `json:"devices"`
+	CollectedAt         string   `json:"collected_at"`
+	Stale               bool     `json:"stale"`
+	Error               string   `json:"error,omitempty"`
+	Tailnet             string   `json:"tailnet,omitempty"`
+	SelfHostname        string   `json:"self_hostname,omitempty"`
+	AuthEnabled         bool     `json:"auth_enabled"`
+	TerminalEnabled     bool     `json:"terminal_enabled"`
+	TerminalPinRequired bool     `json:"terminal_pin_required"`
+	Devices             []Device `json:"devices"`
 }
 
 // tailscaleStatus mirrors the relevant fields of `tailscale status --json`.
@@ -145,8 +160,10 @@ func NewCollector(cfg Config) *Collector {
 		cfg:   cfg,
 		ready: make(chan struct{}),
 		snapshot: Snapshot{
-			AuthEnabled: cfg.Password != "",
-			Devices:     []Device{},
+			AuthEnabled:         cfg.Password != "",
+			TerminalEnabled:     cfg.Password != "",
+			TerminalPinRequired: cfg.Password != "" && cfg.TerminalPin != "",
+			Devices:             []Device{},
 		},
 	}
 }
@@ -201,6 +218,8 @@ func (c *Collector) Refresh(ctx context.Context) {
 		c.snapshot.Stale = true
 		c.snapshot.Error = err.Error()
 		c.snapshot.AuthEnabled = c.cfg.Password != ""
+		c.snapshot.TerminalEnabled = c.cfg.Password != ""
+		c.snapshot.TerminalPinRequired = c.cfg.Password != "" && c.cfg.TerminalPin != ""
 		if c.snapshot.Devices == nil {
 			c.snapshot.Devices = []Device{}
 		}
@@ -267,6 +286,10 @@ func (c *Collector) collectOnce(ctx context.Context) (Snapshot, error) {
 		if !probe {
 			continue
 		}
+		if devices[i].IsSelf || devices[i].Online {
+			devices[i].TerminalAvailable = true
+			devices[i].TerminalTargetID = canonicalDeviceID(devices[i])
+		}
 
 		wg.Add(1)
 		go func() {
@@ -301,12 +324,14 @@ func (c *Collector) collectOnce(ctx context.Context) (Snapshot, error) {
 	}
 
 	return Snapshot{
-		CollectedAt:  time.Now().UTC().Format(time.RFC3339),
-		Stale:        false,
-		Tailnet:      tailnet,
-		SelfHostname: selfHostname,
-		AuthEnabled:  c.cfg.Password != "",
-		Devices:      devices,
+		CollectedAt:         time.Now().UTC().Format(time.RFC3339),
+		Stale:               false,
+		Tailnet:             tailnet,
+		SelfHostname:        selfHostname,
+		AuthEnabled:         c.cfg.Password != "",
+		TerminalEnabled:     c.cfg.Password != "",
+		TerminalPinRequired: c.cfg.Password != "" && c.cfg.TerminalPin != "",
+		Devices:             devices,
 	}, nil
 }
 
@@ -366,6 +391,44 @@ func formatValidTimestamp(raw string) string {
 	return t.UTC().Format(time.RFC3339)
 }
 
+func canonicalDeviceID(d Device) string {
+	for _, cand := range []string{d.TailscaleIP, d.DNSName, d.Hostname} {
+		if s := strings.ToLower(strings.TrimSpace(cand)); s != "" {
+			return s
+		}
+	}
+	return ""
+}
+
+func osKindFromDevice(d Device) string {
+	osLower := strings.ToLower(strings.TrimSpace(d.OS))
+	if osLower == "macos" || osLower == "darwin" {
+		return "darwin"
+	}
+	return "linux"
+}
+
+func parseSSHTargets(raw string) map[string]string {
+	out := make(map[string]string)
+	for _, entry := range strings.Split(raw, ",") {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+		k, v, ok := strings.Cut(entry, "=")
+		if !ok {
+			continue
+		}
+		k = strings.ToLower(strings.TrimSpace(k))
+		v = strings.TrimSpace(v)
+		if k == "" || v == "" {
+			continue
+		}
+		out[k] = v
+	}
+	return out
+}
+
 func (c *Collector) resolveProbeTarget(d Device) (sshTarget string, osKind string, specNote string, shouldProbe bool) {
 	if d.IsSelf {
 		return "", runtime.GOOS, "", true
@@ -374,9 +437,22 @@ func (c *Collector) resolveProbeTarget(d Device) (sshTarget string, osKind strin
 		return "", "", "", false
 	}
 
-	dnsLower := strings.ToLower(d.DNSName)
-	hostLower := strings.ToLower(d.Hostname)
-	osLower := strings.ToLower(d.OS)
+	dnsLower := strings.ToLower(strings.TrimSpace(d.DNSName))
+	shortDNS := dnsLower
+	if idx := strings.IndexByte(shortDNS, '.'); idx > 0 {
+		shortDNS = shortDNS[:idx]
+	}
+	hostLower := strings.ToLower(strings.TrimSpace(d.Hostname))
+	ipLower := strings.ToLower(strings.TrimSpace(d.TailscaleIP))
+	osLower := strings.ToLower(strings.TrimSpace(d.OS))
+
+	for _, key := range []string{hostLower, shortDNS, dnsLower, ipLower} {
+		if key != "" {
+			if target, ok := c.cfg.SSHTargets[key]; ok && target != "" {
+				return target, osKindFromDevice(d), "", true
+			}
+		}
+	}
 
 	if strings.HasPrefix(dnsLower, "adityas-macbook-pro") || osLower == "macos" || osLower == "darwin" {
 		if c.cfg.SSHMac != "" {
@@ -1111,6 +1187,19 @@ func envDuration(key string, fallback time.Duration) time.Duration {
 	return d
 }
 
+func envInt(key string, fallback int) int {
+	v := strings.TrimSpace(os.Getenv(key))
+	if v == "" {
+		return fallback
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n <= 0 {
+		log.Printf("invalid %s=%q, using %d", key, v, fallback)
+		return fallback
+	}
+	return n
+}
+
 func main() {
 	tsBin, err := resolveTailscaleBin(strings.TrimSpace(os.Getenv("TAILMON_TAILSCALE_BIN")))
 	if err != nil {
@@ -1118,15 +1207,19 @@ func main() {
 	}
 
 	cfg := Config{
-		Addr:         envOrDefault("TAILMON_ADDR", defaultAddr),
-		Password:     os.Getenv("TAILMON_PASSWORD"),
-		Interval:     envDuration("TAILMON_INTERVAL", defaultInterval),
-		SSHTimeout:   envDuration("TAILMON_SSH_TIMEOUT", defaultSSHTimeout),
-		SSHMac:       envOrDefault("TAILMON_SSH_MAC", defaultSSHMac),
-		SSHTokyo:     envOrDefault("TAILMON_SSH_TOKYO", defaultSSHTokyo),
-		SSHInstabox:  envOrDefault("TAILMON_SSH_INSTABOX", defaultSSHInstabox),
-		SSHVPS:       strings.TrimSpace(os.Getenv("TAILMON_SSH_VPS")),
-		TailscaleBin: tsBin,
+		Addr:            envOrDefault("TAILMON_ADDR", defaultAddr),
+		Password:        os.Getenv("TAILMON_PASSWORD"),
+		TerminalPin:     os.Getenv("TAILMON_TERMINAL_PIN"),
+		Interval:        envDuration("TAILMON_INTERVAL", defaultInterval),
+		SSHTimeout:      envDuration("TAILMON_SSH_TIMEOUT", defaultSSHTimeout),
+		TermIdleTimeout: envDuration("TAILMON_TERM_IDLE_TIMEOUT", defaultTermIdleTimeout),
+		TermMaxSessions: envInt("TAILMON_TERM_MAX_SESSIONS", defaultTermMaxSessions),
+		SSHMac:          envOrDefault("TAILMON_SSH_MAC", defaultSSHMac),
+		SSHTokyo:        envOrDefault("TAILMON_SSH_TOKYO", defaultSSHTokyo),
+		SSHInstabox:     envOrDefault("TAILMON_SSH_INSTABOX", defaultSSHInstabox),
+		SSHVPS:          strings.TrimSpace(os.Getenv("TAILMON_SSH_VPS")),
+		SSHTargets:      parseSSHTargets(os.Getenv("TAILMON_SSH_TARGETS")),
+		TailscaleBin:    tsBin,
 	}
 
 	var cookieToken string
@@ -1134,11 +1227,17 @@ func main() {
 		cookieToken = computeAuthToken(cfg.Password)
 		log.Printf("password gate enabled (Bearer token or /login cookie required)")
 	} else {
-		log.Printf("WARNING: TAILMON_PASSWORD is empty; dashboard is running without authentication")
+		log.Printf("WARNING: TAILMON_PASSWORD is empty; dashboard is running without authentication (in-app terminal disabled)")
+	}
+	var pinCookieToken string
+	if cfg.Password != "" && cfg.TerminalPin != "" {
+		pinCookieToken = computeTerminalPinToken(cfg.TerminalPin)
+		log.Printf("terminal secondary PIN gate enabled")
 	}
 	log.Printf("using tailscale binary: %s", cfg.TailscaleBin)
 
 	collector := NewCollector(cfg)
+	termManager := NewTerminalManager(cfg, collector, cookieToken, pinCookieToken)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -1261,6 +1360,29 @@ func main() {
 		writeJSON(w, http.StatusOK, collector.GetSnapshot())
 	})
 
+	xtermSubFS, err := fs.Sub(xtermAssets, "assets/xterm")
+	if err != nil {
+		log.Fatalf("xterm embed error: %v", err)
+	}
+	xtermHandler := http.StripPrefix("/assets/xterm/", http.FileServer(http.FS(xtermSubFS)))
+	mux.HandleFunc("/assets/xterm/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if !isAuthenticated(r, cfg.Password, cookieToken) {
+			w.Header().Set("WWW-Authenticate", `Bearer realm="tailmon"`)
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+			return
+		}
+		w.Header().Set("Cache-Control", "public, max-age=86400")
+		xtermHandler.ServeHTTP(w, r)
+	})
+
+	mux.HandleFunc("/api/terminal/status", termManager.HandleStatus)
+	mux.HandleFunc("/api/terminal/unlock", termManager.HandleUnlock)
+	mux.HandleFunc("/api/terminal/ws", termManager.HandleWS)
+
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {
 			if !isAuthenticated(r, cfg.Password, cookieToken) {
@@ -1316,6 +1438,7 @@ func main() {
 		}
 	case <-ctx.Done():
 		log.Printf("shutting down...")
+		termManager.CloseAll()
 		shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if err := srv.Shutdown(shutCtx); err != nil {

@@ -8,6 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/xterm/xterm.css">
 <script>
 (function () {
   var saved = 'light';
@@ -2001,6 +2002,329 @@
     .reveal { animation: none !important; }
     *, *::before, *::after { transition-duration: 0.01ms !important; }
   }
+
+  /* ======================================================================== */
+  /* IN-APP TERMINAL DOCK & DEVICE LAUNCHER                                   */
+  /* ======================================================================== */
+  .term-launch-btn {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 9px;
+    border-radius: 999px;
+    border: 1px solid var(--border-strong);
+    background: var(--surface-inset);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: border-color 0.15s ease, background-color 0.15s ease, transform 0.12s ease;
+  }
+  .term-launch-btn:hover {
+    border-color: var(--text-primary);
+    background: var(--surface);
+  }
+  .term-launch-btn:active { transform: scale(0.97); }
+  .term-launch-btn svg { flex-shrink: 0; }
+
+  body.term-dock-open .page-wrap {
+    padding-bottom: 400px;
+  }
+
+  .term-dock {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 380px;
+    min-height: 180px;
+    max-height: calc(100vh - 48px);
+    z-index: 900;
+    display: none;
+    flex-direction: column;
+    background: #0E1015;
+    color: #E6E8EE;
+    border-top: 1px solid rgba(255, 255, 255, 0.14);
+    box-shadow: 0 -18px 50px rgba(0, 0, 0, 0.45);
+  }
+  .term-dock.open { display: flex; }
+  .term-dock.minimized {
+    height: 40px !important;
+    min-height: 40px !important;
+  }
+  .term-dock.minimized .term-dock-body,
+  .term-dock.minimized .term-resize-handle {
+    display: none;
+  }
+  .term-dock.fullscreen {
+    top: 0 !important;
+    height: 100vh !important;
+    max-height: 100vh !important;
+    border-top: 0;
+  }
+  .term-dock.fullscreen .term-resize-handle {
+    display: none;
+  }
+
+  .term-resize-handle {
+    height: 6px;
+    width: 100%;
+    cursor: ns-resize;
+    background: transparent;
+    position: relative;
+    flex-shrink: 0;
+  }
+  .term-resize-handle::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 2px;
+    transform: translateX(-50%);
+    width: 40px;
+    height: 2px;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.22);
+  }
+  .term-resize-handle:hover::after {
+    background: rgba(125, 169, 247, 0.75);
+  }
+
+  .term-dock-bar {
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 0 10px;
+    background: #151821;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    flex-shrink: 0;
+    user-select: none;
+  }
+
+  .term-tabs-scroll {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    overflow-x: auto;
+    min-width: 0;
+    flex: 1;
+  }
+  .term-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    height: 28px;
+    padding: 0 10px;
+    border-radius: 7px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: #9AA0AE;
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .term-tab:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: #E6E8EE;
+  }
+  .term-tab.active {
+    background: #0E1015;
+    border-color: rgba(255, 255, 255, 0.14);
+    color: #FFFFFF;
+  }
+  .term-tab-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #6B7280;
+    flex-shrink: 0;
+  }
+  .term-tab-dot.connecting { background: #E9CC65; }
+  .term-tab-dot.connected { background: #22C55E; }
+  .term-tab-dot.closed { background: #EF4444; }
+  .term-tab-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    border-radius: 4px;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    opacity: 0.65;
+    cursor: pointer;
+    font-size: 13px;
+    line-height: 1;
+    padding: 0;
+  }
+  .term-tab-close:hover {
+    opacity: 1;
+    background: rgba(255, 255, 255, 0.12);
+  }
+
+  .term-new-wrap {
+    position: relative;
+    flex-shrink: 0;
+  }
+  .term-icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 26px;
+    padding: 0 8px;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.04);
+    color: #C7CBD4;
+    font-family: var(--font-sans);
+    font-size: 11.5px;
+    font-weight: 500;
+    cursor: pointer;
+    gap: 5px;
+  }
+  .term-icon-btn:hover {
+    background: rgba(255, 255, 255, 0.10);
+    color: #FFFFFF;
+  }
+  .term-host-menu {
+    position: fixed;
+    z-index: 950;
+    min-width: 210px;
+    max-height: 260px;
+    overflow-y: auto;
+    padding: 5px;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: #1B1E28;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55);
+    display: none;
+  }
+  .term-host-menu.open { display: block; }
+  .term-host-item {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 7px 9px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: #E6E8EE;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    text-align: left;
+    cursor: pointer;
+  }
+  .term-host-item:hover { background: rgba(125, 169, 247, 0.16); }
+  .term-host-sub {
+    color: #8E95A5;
+    font-size: 10.5px;
+  }
+
+  .term-dock-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  .term-dock-body {
+    flex: 1;
+    min-height: 0;
+    position: relative;
+    padding: 6px 8px 8px;
+    background: #0E1015;
+  }
+  .term-pane {
+    position: absolute;
+    inset: 6px 8px 8px;
+    display: none;
+  }
+  .term-pane.active { display: block; }
+  .term-pane .xterm { height: 100%; }
+
+  /* PIN Modal */
+  .term-pin-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 980;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background: rgba(9, 9, 12, 0.62);
+    backdrop-filter: blur(6px);
+  }
+  .term-pin-backdrop.open { display: flex; }
+  .term-pin-card {
+    width: 100%;
+    max-width: 360px;
+    padding: 22px;
+    border-radius: 18px;
+    border: 1px solid var(--border-strong);
+    background: var(--surface);
+    color: var(--text-primary);
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+  }
+  .term-pin-card h3 {
+    margin: 0 0 6px;
+    font-size: 16px;
+    font-weight: 600;
+  }
+  .term-pin-card p {
+    margin: 0 0 14px;
+    font-size: 12.5px;
+    color: var(--text-muted);
+  }
+  .term-pin-input {
+    width: 100%;
+    height: 40px;
+    padding: 0 12px;
+    border-radius: 10px;
+    border: 1px solid var(--border-strong);
+    background: var(--surface-inset);
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: 14px;
+    outline: none;
+  }
+  .term-pin-input:focus { border-color: var(--text-primary); }
+  .term-pin-err {
+    margin-top: 8px;
+    font-size: 12px;
+    color: #EF4444;
+    min-height: 16px;
+  }
+  .term-pin-actions {
+    margin-top: 14px;
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+  .term-pin-btn {
+    height: 36px;
+    padding: 0 14px;
+    border-radius: 999px;
+    border: 1px solid var(--border-strong);
+    background: var(--surface-inset);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  .term-pin-btn.primary {
+    background: var(--text-primary);
+    color: var(--page-bg);
+    border-color: transparent;
+  }
 </style>
 </head>
 <body>
@@ -2325,6 +2649,44 @@
     </section>
   </div>
 
+  <!-- In-App Terminal Dock -->
+  <section id="termDock" class="term-dock" aria-label="In-app SSH terminal">
+    <div id="termResizeHandle" class="term-resize-handle" title="Drag to resize terminal"></div>
+    <div class="term-dock-bar">
+      <div id="termTabsScroll" class="term-tabs-scroll">
+        <div class="term-new-wrap">
+          <button id="termNewBtn" class="term-icon-btn" type="button" title="Open new terminal tab">+ New</button>
+        </div>
+      </div>
+      <div class="term-dock-actions">
+        <button id="termReconnectBtn" class="term-icon-btn" type="button" style="display:none">Reconnect</button>
+        <button id="termMinBtn" class="term-icon-btn" type="button" title="Minimize/Restore">_</button>
+        <button id="termFullBtn" class="term-icon-btn" type="button" title="Toggle fullscreen">Expand</button>
+        <button id="termCloseAllBtn" class="term-icon-btn" type="button" title="Close terminal dock">Close</button>
+      </div>
+    </div>
+    <div id="termDockBody" class="term-dock-body"></div>
+  </section>
+
+  <div id="termHostMenu" class="term-host-menu" role="menu"></div>
+
+  <!-- Optional Terminal PIN Modal -->
+  <div id="termPinModal" class="term-pin-backdrop" role="dialog" aria-modal="true" aria-labelledby="termPinTitle">
+    <form id="termPinForm" class="term-pin-card">
+      <h3 id="termPinTitle">Unlock Terminal</h3>
+      <p>Enter the secondary terminal PIN (`TAILMON_TERMINAL_PIN`) to open shell sessions.</p>
+      <input id="termPinInput" class="term-pin-input" type="password" autocomplete="off" placeholder="Terminal PIN" required>
+      <div id="termPinErr" class="term-pin-err"></div>
+      <div class="term-pin-actions">
+        <button id="termPinCancel" class="term-pin-btn" type="button">Cancel</button>
+        <button class="term-pin-btn primary" type="submit">Unlock</button>
+      </div>
+    </form>
+  </div>
+
+<script src="/assets/xterm/xterm.js"></script>
+<script src="/assets/xterm/addon-fit.js"></script>
+<script src="/assets/xterm/addon-web-links.js"></script>
 <script>
 (function () {
   const REFRESH_SECONDS = 60;
@@ -3010,6 +3372,7 @@
           ${d.tailscale_ip ? `<button class="ip-copy-btn" type="button" data-copy="${esc(d.tailscale_ip)}" title="Copy Tailscale IP">${esc(d.tailscale_ip)}</button>` : ''}
           ${shortDns ? `<span class="dns-short" title="${esc(d.dns_name)}">${esc(shortDns)}</span>` : ''}
           ${d.relay ? `<span class="relay-pill" title="DERP relay">${esc(d.relay)}</span>` : ''}
+          ${(snapshot && snapshot.terminal_enabled && d.online && d.terminal_available) ? `<button class="term-launch-btn" type="button" data-term-device="${esc(d.terminal_target_id || id)}" data-term-label="${esc(shortHost(d))}" title="Open SSH terminal"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg><span>Terminal</span></button>` : ''}
         </div>
 
         ${expiryHtml}
@@ -3308,6 +3671,15 @@
   });
 
   document.addEventListener('keydown', e => {
+    const active = document.activeElement;
+    if (active && (active.closest('#termDock') || active.closest('#termPinModal') || active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) {
+      if (e.key === 'Escape' && active.closest('#termPinModal')) {
+        closePinModal();
+      } else if (e.key === 'Escape' && active === elSearch) {
+        elSearch.blur();
+      }
+      return;
+    }
     if (e.key === '/' && document.activeElement !== elSearch && !e.metaKey && !e.ctrlKey && !e.altKey) {
       e.preventDefault();
       elSearch.focus();
@@ -3322,8 +3694,15 @@
 
   elRefreshBtn.addEventListener('click', () => fetchDevices(true));
 
-  // Copy IP button
+  // Copy IP button & Terminal launch button
   elFleetGrid.addEventListener('click', async e => {
+    const termBtn = e.target.closest('.term-launch-btn');
+    if (termBtn) {
+      const devId = termBtn.dataset.termDevice;
+      const label = termBtn.dataset.termLabel || devId;
+      if (devId) openTerminalForDevice(devId, label, false);
+      return;
+    }
     const btn = e.target.closest('.ip-copy-btn');
     if (!btn) return;
     const text = btn.dataset.copy;
@@ -3338,6 +3717,360 @@
         btn.classList.remove('copied');
       }, 1100);
     } catch (_) {}
+  });
+
+  /* ------------------------------------------------------------------------ */
+  /* Multi-Tab Terminal Dock Controller                                       */
+  /* ------------------------------------------------------------------------ */
+  const elTermDock = document.getElementById('termDock');
+  const elTermResizeHandle = document.getElementById('termResizeHandle');
+  const elTermTabsScroll = document.getElementById('termTabsScroll');
+  const elTermNewBtn = document.getElementById('termNewBtn');
+  const elTermHostMenu = document.getElementById('termHostMenu');
+  const elTermDockBody = document.getElementById('termDockBody');
+  const elTermReconnectBtn = document.getElementById('termReconnectBtn');
+  const elTermMinBtn = document.getElementById('termMinBtn');
+  const elTermFullBtn = document.getElementById('termFullBtn');
+  const elTermCloseAllBtn = document.getElementById('termCloseAllBtn');
+  const elTermPinModal = document.getElementById('termPinModal');
+  const elTermPinForm = document.getElementById('termPinForm');
+  const elTermPinInput = document.getElementById('termPinInput');
+  const elTermPinErr = document.getElementById('termPinErr');
+  const elTermPinCancel = document.getElementById('termPinCancel');
+
+  const termTabs = new Map();
+  let activeTermTabId = null;
+  let termTabSeq = 0;
+  let pendingPinResolve = null;
+
+  function closePinModal() {
+    elTermPinModal.classList.remove('open');
+    elTermPinErr.textContent = '';
+    elTermPinInput.value = '';
+    if (pendingPinResolve) {
+      const res = pendingPinResolve;
+      pendingPinResolve = null;
+      res(false);
+    }
+  }
+
+  elTermPinCancel.addEventListener('click', closePinModal);
+  elTermPinModal.addEventListener('click', e => {
+    if (e.target === elTermPinModal) closePinModal();
+  });
+
+  elTermPinForm.addEventListener('submit', async e => {
+    e.preventDefault();
+    elTermPinErr.textContent = '';
+    try {
+      const resp = await fetch('/api/terminal/unlock', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin: elTermPinInput.value })
+      });
+      if (!resp.ok) {
+        const errData = await resp.json().catch(() => ({}));
+        elTermPinErr.textContent = errData.error || 'Invalid terminal PIN';
+        elTermPinInput.select();
+        return;
+      }
+      elTermPinModal.classList.remove('open');
+      elTermPinInput.value = '';
+      if (pendingPinResolve) {
+        const res = pendingPinResolve;
+        pendingPinResolve = null;
+        res(true);
+      }
+    } catch (_) {
+      elTermPinErr.textContent = 'Network error verifying PIN';
+    }
+  });
+
+  async function ensureTerminalUnlocked() {
+    if (!snapshot || !snapshot.terminal_enabled) return false;
+    if (!snapshot.terminal_pin_required) return true;
+    try {
+      const resp = await fetch('/api/terminal/status', { cache: 'no-store' });
+      if (resp.ok) {
+        const st = await resp.json();
+        if (st.pin_unlocked) return true;
+      }
+    } catch (_) {}
+    elTermPinErr.textContent = '';
+    elTermPinInput.value = '';
+    elTermPinModal.classList.add('open');
+    setTimeout(() => elTermPinInput.focus(), 20);
+    return new Promise(resolve => {
+      pendingPinResolve = resolve;
+    });
+  }
+
+  function showTermDock() {
+    elTermDock.classList.add('open');
+    elTermDock.classList.remove('minimized');
+    document.body.classList.add('term-dock-open');
+    scheduleFitActiveTab();
+  }
+
+  function hideTermDock() {
+    elTermDock.classList.remove('open', 'minimized', 'fullscreen');
+    document.body.classList.remove('term-dock-open');
+    elTermFullBtn.textContent = 'Expand';
+  }
+
+  let fitTimer = null;
+  function scheduleFitActiveTab() {
+    clearTimeout(fitTimer);
+    fitTimer = setTimeout(() => {
+      const tab = termTabs.get(activeTermTabId);
+      if (tab && !elTermDock.classList.contains('minimized')) {
+        try {
+          tab.fitAddon.fit();
+          tab.term.focus();
+        } catch (_) {}
+      }
+    }, 50);
+  }
+
+  if (typeof ResizeObserver !== 'undefined') {
+    new ResizeObserver(() => scheduleFitActiveTab()).observe(elTermDockBody);
+  }
+  window.addEventListener('resize', () => scheduleFitActiveTab());
+
+  function setTabStatus(tab, status) {
+    tab.status = status;
+    const dot = tab.tabEl.querySelector('.term-tab-dot');
+    if (dot) {
+      dot.className = 'term-tab-dot ' + status;
+    }
+    if (tab.id === activeTermTabId) {
+      elTermReconnectBtn.style.display = status === 'closed' ? 'inline-flex' : 'none';
+    }
+  }
+
+  function activateTermTab(id) {
+    const tab = termTabs.get(id);
+    if (!tab) return;
+    activeTermTabId = id;
+    for (const t of termTabs.values()) {
+      const isAct = t.id === id;
+      t.tabEl.classList.toggle('active', isAct);
+      t.paneEl.classList.toggle('active', isAct);
+    }
+    elTermReconnectBtn.style.display = tab.status === 'closed' ? 'inline-flex' : 'none';
+    showTermDock();
+  }
+
+  function closeTermTab(id) {
+    const tab = termTabs.get(id);
+    if (!tab) return;
+    try { if (tab.ws) tab.ws.close(); } catch (_) {}
+    try { tab.term.dispose(); } catch (_) {}
+    tab.tabEl.remove();
+    tab.paneEl.remove();
+    termTabs.delete(id);
+
+    if (termTabs.size === 0) {
+      activeTermTabId = null;
+      hideTermDock();
+      return;
+    }
+    if (activeTermTabId === id) {
+      const next = Array.from(termTabs.keys()).pop();
+      activateTermTab(next);
+    }
+  }
+
+  function connectTabWS(tab) {
+    if (tab.ws && (tab.ws.readyState === WebSocket.OPEN || tab.ws.readyState === WebSocket.CONNECTING)) {
+      return;
+    }
+    setTabStatus(tab, 'connecting');
+    try { tab.fitAddon.fit(); } catch (_) {}
+    const cols = tab.term.cols || 100;
+    const rows = tab.term.rows || 30;
+    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${proto}//${location.host}/api/terminal/ws?device=${encodeURIComponent(tab.deviceId)}&cols=${cols}&rows=${rows}`;
+
+    const ws = new WebSocket(wsUrl);
+    ws.binaryType = 'arraybuffer';
+    tab.ws = ws;
+
+    const encoder = new TextEncoder();
+    if (!tab.boundEvents) {
+      tab.boundEvents = true;
+      tab.term.onData(data => {
+        if (tab.ws && tab.ws.readyState === WebSocket.OPEN) {
+          tab.ws.send(encoder.encode(data));
+        }
+      });
+      tab.term.onResize(({ cols: c, rows: r }) => {
+        if (tab.ws && tab.ws.readyState === WebSocket.OPEN) {
+          tab.ws.send(JSON.stringify({ type: 'resize', cols: c, rows: r }));
+        }
+      });
+    }
+
+    ws.onopen = () => {
+      setTabStatus(tab, 'connected');
+      scheduleFitActiveTab();
+    };
+    ws.onmessage = ev => {
+      if (ev.data instanceof ArrayBuffer) {
+        tab.term.write(new Uint8Array(ev.data));
+      } else if (typeof ev.data === 'string') {
+        tab.term.write(ev.data);
+      }
+    };
+    ws.onclose = ev => {
+      setTabStatus(tab, 'closed');
+      const reason = ev.reason ? ` (${ev.reason})` : '';
+      tab.term.write(`\r\n\x1b[90m[Session closed${reason} — click Reconnect]\x1b[0m\r\n`);
+    };
+    ws.onerror = () => {
+      setTabStatus(tab, 'closed');
+    };
+  }
+
+  async function openTerminalForDevice(deviceId, label, forceNewTab) {
+    if (!window.Terminal || !window.FitAddon) {
+      alert('Terminal assets failed to load.');
+      return;
+    }
+    const unlocked = await ensureTerminalUnlocked();
+    if (!unlocked) return;
+
+    if (!forceNewTab) {
+      for (const t of termTabs.values()) {
+        if (t.deviceId === deviceId && t.status !== 'closed') {
+          activateTermTab(t.id);
+          return;
+        }
+      }
+    }
+
+    termTabSeq += 1;
+    const id = 'ttab-' + termTabSeq;
+
+    const tabEl = document.createElement('div');
+    tabEl.className = 'term-tab';
+    tabEl.innerHTML = `<span class="term-tab-dot connecting"></span><span>${esc(label)}</span><button class="term-tab-close" type="button" title="Close tab">&times;</button>`;
+    tabEl.addEventListener('click', ev => {
+      if (ev.target.closest('.term-tab-close')) {
+        closeTermTab(id);
+        return;
+      }
+      activateTermTab(id);
+    });
+
+    const newWrap = elTermNewBtn.parentElement;
+    elTermTabsScroll.insertBefore(tabEl, newWrap);
+
+    const paneEl = document.createElement('div');
+    paneEl.className = 'term-pane';
+    elTermDockBody.appendChild(paneEl);
+
+    const term = new window.Terminal({
+      cursorBlink: true,
+      fontFamily: '"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace',
+      fontSize: 13,
+      lineHeight: 1.25,
+      theme: {
+        background: '#0E1015',
+        foreground: '#E6E8EE',
+        cursor: '#7DA9F7',
+        selectionBackground: 'rgba(125, 169, 247, 0.28)'
+      }
+    });
+    const fitAddon = new window.FitAddon.FitAddon();
+    term.loadAddon(fitAddon);
+    if (window.WebLinksAddon && window.WebLinksAddon.WebLinksAddon) {
+      term.loadAddon(new window.WebLinksAddon.WebLinksAddon());
+    }
+    term.open(paneEl);
+
+    const tab = { id, deviceId, label, status: 'connecting', term, fitAddon, ws: null, tabEl, paneEl, boundEvents: false };
+    termTabs.set(id, tab);
+    activateTermTab(id);
+    connectTabWS(tab);
+  }
+
+  elTermReconnectBtn.addEventListener('click', () => {
+    const tab = termTabs.get(activeTermTabId);
+    if (tab) connectTabWS(tab);
+  });
+
+  elTermMinBtn.addEventListener('click', () => {
+    const isMin = elTermDock.classList.toggle('minimized');
+    if (isMin) elTermDock.classList.remove('fullscreen');
+    else scheduleFitActiveTab();
+  });
+
+  elTermFullBtn.addEventListener('click', () => {
+    elTermDock.classList.remove('minimized');
+    const isFull = elTermDock.classList.toggle('fullscreen');
+    elTermFullBtn.textContent = isFull ? 'Restore' : 'Expand';
+    scheduleFitActiveTab();
+  });
+
+  elTermCloseAllBtn.addEventListener('click', () => {
+    for (const id of Array.from(termTabs.keys())) {
+      closeTermTab(id);
+    }
+    hideTermDock();
+  });
+
+  elTermNewBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    if (!snapshot || !snapshot.devices) return;
+    const avail = snapshot.devices.filter(d => d.online && d.terminal_available);
+    if (avail.length === 0) {
+      elTermHostMenu.innerHTML = '<div class="term-host-item" style="opacity:.6;cursor:default">No terminal-enabled hosts</div>';
+    } else {
+      elTermHostMenu.innerHTML = avail.map(d => {
+        const devId = d.terminal_target_id || deviceId(d);
+        const label = shortHost(d);
+        const sub = d.is_self ? 'local' : (d.tailscale_ip || 'ssh');
+        return `<button class="term-host-item" type="button" data-dev="${esc(devId)}" data-label="${esc(label)}"><span>${esc(label)}</span><span class="term-host-sub">${esc(sub)}</span></button>`;
+      }).join('');
+    }
+    const rect = elTermNewBtn.getBoundingClientRect();
+    elTermHostMenu.style.left = Math.max(8, rect.left) + 'px';
+    elTermHostMenu.style.bottom = (window.innerHeight - rect.top + 6) + 'px';
+    elTermHostMenu.classList.toggle('open');
+  });
+
+  elTermHostMenu.addEventListener('click', e => {
+    const item = e.target.closest('.term-host-item[data-dev]');
+    if (!item) return;
+    elTermHostMenu.classList.remove('open');
+    openTerminalForDevice(item.dataset.dev, item.dataset.label, true);
+  });
+
+  document.addEventListener('click', e => {
+    if (!e.target.closest('#termHostMenu') && !e.target.closest('#termNewBtn')) {
+      elTermHostMenu.classList.remove('open');
+    }
+  });
+
+  // Vertical dock drag resize
+  let resizingDock = false;
+  elTermResizeHandle.addEventListener('mousedown', e => {
+    e.preventDefault();
+    resizingDock = true;
+    document.body.style.userSelect = 'none';
+  });
+  window.addEventListener('mousemove', e => {
+    if (!resizingDock) return;
+    const nextH = Math.min(window.innerHeight - 48, Math.max(180, window.innerHeight - e.clientY));
+    elTermDock.style.height = nextH + 'px';
+    scheduleFitActiveTab();
+  });
+  window.addEventListener('mouseup', () => {
+    if (!resizingDock) return;
+    resizingDock = false;
+    document.body.style.userSelect = '';
+    scheduleFitActiveTab();
   });
 
   // Auto-refresh countdown
